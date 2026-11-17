@@ -44,7 +44,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
 </style>
 </head>
 <body>
-<header><h1>CodeCoach</h1><div class="who"><span id="who"></span> <button id="logout" class="hidden">Log out</button></div></header>
+<header><h1>CodeCoach</h1><div class="who"><span id="who"></span> <a id="staffLink" class="hidden" href="staff.html" style="color:#fff;margin:0 6px">Tutor page</a> <button id="logout" class="hidden">Log out</button></div></header>
 <main>
   <!-- LOGIN -->
   <section id="vLogin" class="card hidden">
@@ -99,7 +99,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   </section>
   <div id="globalMsg"></div>
 </main>
-<footer>CodeCoach pilot v0.1 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer>CodeCoach pilot v0.2 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 
 <script>
 // ---------- configuration (public key: safe in the app; data protected by database rules) ----------
@@ -131,11 +131,12 @@ db.auth.onAuthStateChange((_e,session)=>{const u=session?.user||null;if(!started
 
 async function route(){
   $("logout").classList.toggle("hidden",!user);$("who").textContent=user?user.email:"";
-  if(!user){show("vLogin");return;}
+  if(!user){$("staffLink").classList.add("hidden");show("vLogin");return;}
   const {data:prof,error}=await db.from("profiles").select("id,role,study_id,consent_at").eq("id",user.id).maybeSingle();
   if(error){msg("globalMsg","Could not load your profile: "+error.message);return;}
   if(!prof||!prof.consent_at){show("vConsent");return;}
   $("who").textContent=user.email+(prof.study_id?" · "+prof.study_id:"")+(prof.role!=="student"?" · "+prof.role:"");
+  $("staffLink").classList.toggle("hidden",prof.role==="student");
   show("vApp");await loadData();
 }
 
