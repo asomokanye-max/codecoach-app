@@ -51,7 +51,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   <!-- LOGIN -->
   <section id="vLogin" class="card hidden">
     <h2>Welcome to CodeCoach</h2>
-    <p class="hint">ICD-10 coding practice with instant feedback. Pilot version for the School of Health Information Management, OAUTHC.</p>
+    <p class="hint">ICD-10 and ICD-11 coding practice with instant feedback. Pilot version for the School of Health Information Management, OAUTHC.</p>
     <div class="tabs"><button id="tIn">Log in</button><button id="tUp" class="sec">Create account</button></div>
     <label for="email">Email</label><input id="email" type="email" autocomplete="username">
     <label for="pw">Password (at least 8 characters)</label><input id="pw" type="password" autocomplete="current-password">
@@ -74,7 +74,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   <section id="vConsent" class="card hidden">
     <h2>Information and consent</h2>
     <div class="consent">
-      <p><b>Study:</b> Development and evaluation of CodeCoach, an AI-assisted ICD-10 coding practice tutor for HIM students.</p>
+      <p><b>Study:</b> Development and evaluation of CodeCoach, an AI-assisted ICD-10 and ICD-11 coding practice tutor for HIM students.</p>
       <p><b>Principal investigator:</b> Dr Akingbola Sunday Omokanye, Institute of Public Health, Obafemi Awolowo University, Ile-Ife (asomokanye@oauife.edu.ng, +234 806 244 8712).</p>
       <p><b>What you will do:</b> practise coding cases in CodeCoach and take two coding tests. Your answers, time per case and hint use are recorded for the study.</p>
       <p><b>Your data:</b> your name is stored separately from your answers, which are linked only to a study number. Data are protected in line with the Nigeria Data Protection Act 2023.</p>
@@ -97,7 +97,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
       <label for="code" id="codeLabel">Assign the ICD-10 code for the principal diagnosis</label>
       <div class="row"><input id="code" type="text" placeholder="Type your code" autocomplete="off" maxlength="60"><button id="check">Check</button></div>
       <div class="lookup"><b>Look it up, don't guess.</b> <span id="lookupText"></span>
-        <div class="row" style="margin-top:8px"><button class="sec" id="hintBtn" type="button">Stuck? Show the Index lead term</button></div><div id="hintText" class="hint"></div></div>
+        <div class="row" style="margin-top:8px"><button class="sec" id="hintBtn" type="button">Stuck? Show a hint</button></div><div id="hintText" class="hint"></div></div>
       <div class="hint" id="fmtHint"></div>
       <div id="feedback"></div>
       <div class="row" style="justify-content:flex-end;margin-top:12px"><button id="next" disabled>Next case</button></div>
@@ -113,7 +113,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   </section>
   <div id="globalMsg"></div>
 </main>
-<footer>CodeCoach pilot v0.4 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer>CodeCoach pilot v0.4.1 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 
 <script>
 // ---------- configuration (public key: safe in the app; data protected by database rules) ----------
@@ -249,7 +249,7 @@ $("hintBtn").onclick=async()=>{
   if(!cur)return;$("hintBtn").disabled=true;
   const {data,error}=await db.rpc("get_hint",{p_case:cur.id});
   if(error){$("hintText").textContent="Hint unavailable: "+error.message;$("hintBtn").disabled=false;return;}
-  if(!answered)hintUsed=true;$("hintText").textContent="Index lead term: "+(data||"not available");
+  if(!answered)hintUsed=true;$("hintText").textContent=(cur.classification==="ICD-11"?"Hint: ":"Index lead term: ")+(data||"not available");
 };
 async function check(){
   if(answered||!cur)return;
