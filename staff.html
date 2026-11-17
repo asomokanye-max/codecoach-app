@@ -30,7 +30,7 @@ textarea{width:100%;min-height:60px}
 </style>
 </head>
 <body>
-<header><h1>CodeCoach · Tutor and admin</h1><div class="who"><span id="who"></span><a href="./">Student view</a></div></header>
+<header><h1>CodeCoach · Tutor and admin</h1><div class="who"><span id="who"></span><a href="cases.html">Case workshop</a><a href="./">Student view</a></div></header>
 <main>
   <div id="gate" class="card">Loading…</div>
   <div id="appArea" class="hidden">
@@ -140,7 +140,7 @@ async function rCases(){
   if(c.error){$("t_cases").innerHTML=`<div class="card err">${esc(c.error.message)}</div>`;return;}
   const codes={},notes={};(k.data||[]).forEach(x=>(codes[x.case_id]=codes[x.case_id]||[]).push(x.code));(w.data||[]).forEach(x=>(notes[x.case_id]=notes[x.case_id]||[]).push(x.wrong_code));
   const tries={};att.filter(x=>x.role==="student").forEach(x=>{tries[x.case_no]=tries[x.case_no]||{n:0,ok:0};tries[x.case_no].n++;if(x.is_correct)tries[x.case_no].ok++;});
-  $("t_cases").innerHTML=`<div class="card"><h2>Case bank (${c.data.length} cases)</h2><p class="hint">Read-only for now. Case writing and double-coding screens come in the next build step.</p><table><tr><th>No.</th><th>Case</th><th>Chapter / level</th><th>Accepted</th><th>Notes on wrong codes</th><th>Status</th><th>Student accuracy</th></tr>${c.data.map(x=>{const t=tries[x.case_no];return `<tr><td>${x.case_no}</td><td>${esc(x.case_text)}<div class="hint">Lead term: ${esc(x.lead_term||"–")}</div></td><td>${esc(x.chapter)}<br>${esc(x.difficulty)}</td><td>${esc((codes[x.id]||[]).join(", "))}</td><td>${esc((notes[x.id]||[]).join(", ")||"–")}</td><td>${esc(x.status)}</td><td>${t?`${t.ok}/${t.n}`:"–"}</td></tr>`}).join("")}</table></div>`;
+  $("t_cases").innerHTML=`<div class="card"><h2>Case bank (${c.data.length} cases)</h2><p class="hint">To write, code or approve cases, open the <a href="cases.html">Case workshop</a>.</p><table><tr><th>No.</th><th>Case</th><th>Chapter / level</th><th>Accepted</th><th>Notes on wrong codes</th><th>Status</th><th>Student accuracy</th></tr>${c.data.map(x=>{const t=tries[x.case_no];return `<tr><td>${x.case_no}</td><td>${esc(x.case_text)}<div class="hint">Lead term: ${esc(x.lead_term||"–")}</div></td><td>${esc(x.chapter)}<br>${esc(x.difficulty)}</td><td>${esc((codes[x.id]||[]).join(", "))}</td><td>${esc((notes[x.id]||[]).join(", ")||"–")}</td><td>${esc(x.status)}</td><td>${t?`${t.ok}/${t.n}`:"–"}</td></tr>`}).join("")}</table></div>`;
 }
 
 // ---------- export ----------
