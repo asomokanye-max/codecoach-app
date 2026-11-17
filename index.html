@@ -94,7 +94,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   <!-- APP -->
   <section id="vTest" class="hidden">
     <div class="timer" id="timerBar"><span id="testTitle">Test</span><span>Time left: <span id="timeLeft">--:--</span></span></div>
-    <div class="card"><p><b>Instructions.</b> Assign the code for the principal diagnosis in each record. You may use your ICD-10 books, the <a href="https://icd.who.int/browse10/2019/en" target="_blank" rel="noopener">WHO ICD-10 browser</a>, and the <a href="https://icd.who.int/ct11" target="_blank" rel="noopener">ICD-11 Coding Tool</a> / <a href="https://icd.who.int/browse/mms/en" target="_blank" rel="noopener">Browser</a>. Work on your own; do not discuss the items with anyone. Your answers save automatically. You will not see marks or correct answers. When time runs out, your test is submitted automatically.</p></div>
+    <div class="card"><p><b>Instructions.</b> Assign the code for the principal diagnosis in each record. You may use your ICD-10 books, the <a href="https://icd.who.int/browse10/2019/en" target="_blank" rel="noopener">WHO ICD-10 browser</a>, and the <a href="https://icd.who.int/browse/2026-01/mms/en" target="_blank" rel="noopener">WHO ICD-11 Browser and Coding Tool</a>. Work on your own; do not discuss the items with anyone. Your answers save automatically. You will not see marks or correct answers. When time runs out, your test is submitted automatically.</p></div>
     <div id="testItems"></div>
     <div class="card"><div class="row"><button id="submitTest">Submit test</button><span id="submitMsg" class="hint"></span></div></div>
   </section>
@@ -125,7 +125,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   </section>
   <div id="globalMsg"></div>
 </main>
-<footer>CodeCoach pilot v0.5 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer>CodeCoach pilot v0.5.1 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 
 <script>
 // ---------- configuration (public key: safe in the app; data protected by database rules) ----------
@@ -217,7 +217,7 @@ const GUIDE={"ICD-10":{label:"Assign the ICD-10 code for the principal diagnosis
   look:'Find the lead term in the Alphabetical Index (Volume 3), then confirm the code in the Tabular List (Volume 1). Use your ICD-10 books or the <a href="https://icd.who.int/browse10/2019/en" target="_blank" rel="noopener">WHO ICD-10 online browser</a>.',
   fmt:"Example format: A00.0. The dot is optional.",bad:"That does not look like an ICD-10 code. Format: a letter, two digits, then an optional dot and one or two characters (e.g. A00.0)."},
  "ICD-11":{label:"Assign the ICD-11 code for the principal diagnosis (add extension codes if the record supports them)",
-  look:'Search the term in the <a href="https://icd.who.int/ct11" target="_blank" rel="noopener">WHO ICD-11 Coding Tool</a>, then confirm the entity, its inclusions and exclusions, and any "use additional code" notes in the <a href="https://icd.who.int/browse/mms/en" target="_blank" rel="noopener">ICD-11 Browser</a>. Choose the most specific code the record supports.',
+  look:'Open the <a href="https://icd.who.int/browse/2026-01/mms/en" target="_blank" rel="noopener">WHO ICD-11 Browser</a> and use its <b>Coding Tool</b> tab to search the term, then confirm the entity, its inclusions and exclusions, and any "use additional code" notes in the Browser. Choose the most specific code the record supports.',
   fmt:"Format: a stem code such as 1A00.0. Add an extension code with & (stem&X...). Join a second stem code with / (stem/stem). Spaces and order of extension codes do not matter.",
   bad:"That does not look like an ICD-11 code. A stem code has four characters (e.g. 1A00), optionally a dot and one or two more (1A00.0). Extension codes start with X and are joined with &; extra stem codes are joined with /."}};
 function applyCls(){

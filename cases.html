@@ -78,7 +78,7 @@ async function rCode(){
   const {data,error}=await db.rpc("coding_queue");
   if(error){$("t_code").innerHTML=`<div class="card">${errMsg(error)}</div>`;return;}
   const code=data.filter(x=>x.task==="code"),dec=data.filter(x=>x.task==="decide");
-  let h=`<div class="card"><h2>Cases to code (${code.length})</h2><p class="hint">Code each case on your own, as you would a real record: ICD-10 cases with the ICD-10 index and tabular list, ICD-11 cases with the <a href="https://icd.who.int/ct11" target="_blank" rel="noopener">ICD-11 Coding Tool</a> and <a href="https://icd.who.int/browse/mms/en" target="_blank" rel="noopener">Browser</a> (include extension codes with &amp; and extra stem codes with / where the record supports them). You will not see the author's code or the other coder's code. Then rate how relevant the case is to SHIM coding training and how clearly it is written.</p>`;
+  let h=`<div class="card"><h2>Cases to code (${code.length})</h2><p class="hint">Code each case on your own, as you would a real record: ICD-10 cases with the ICD-10 index and tabular list, ICD-11 cases with the <a href="https://icd.who.int/browse/2026-01/mms/en" target="_blank" rel="noopener">WHO ICD-11 Browser and its Coding Tool tab</a> (include extension codes with &amp; and extra stem codes with / where the record supports them). You will not see the author's code or the other coder's code. Then rate how relevant the case is to SHIM coding training and how clearly it is written.</p>`;
   h+=code.length?code.map((x,i)=>item(x,"c"+i)).join(""):'<p>No cases are waiting for you. Well done.</p>';
   h+=`</div><div class="card"><h2>Third-coder decisions (${dec.length})</h2><p class="hint">The two coders gave different codes. Read the case, check the author's code and both coders' codes, then enter the correct final code. If your code is not the author's, it replaces the author's answer key.</p>`;
   h+=dec.length?dec.map((x,i)=>item(x,"d"+i)).join(""):'<p>No disagreements are waiting for a decision.</p>';
@@ -175,6 +175,6 @@ async function caseAction(b,x){
 }
 start();
 </script>
-<footer style="text-align:center;font-size:.75rem;color:#5b6575;padding:12px">CodeCoach case workshop v0.5 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer style="text-align:center;font-size:.75rem;color:#5b6575;padding:12px">CodeCoach case workshop v0.5.1 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 </body>
 </html>
