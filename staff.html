@@ -37,13 +37,14 @@ textarea{width:100%;min-height:60px}
     <div class="tabs">
       <button data-t="over">Class overview</button><button class="sec" data-t="users">Students and roles</button>
       <button class="sec" data-t="wrong">Wrong codes to explain</button><button class="sec" data-t="expl">Rate explanations</button>
-      <button class="sec" data-t="cases">Case bank</button><button class="sec" data-t="export">Export data</button>
+      <button class="sec" data-t="cases">Case bank</button><button class="sec" data-t="tests">Tests</button><button class="sec" data-t="export">Export data</button>
     </div>
     <section id="t_over"></section>
     <section id="t_users" class="hidden"></section>
     <section id="t_wrong" class="hidden"></section>
     <section id="t_expl" class="hidden"></section>
     <section id="t_cases" class="hidden"></section>
+    <section id="t_tests" class="hidden"></section>
     <section id="t_export" class="hidden"></section>
   </div>
 </main>
@@ -70,7 +71,7 @@ async function loadCore(){
   const u=await db.rpc("staff_users");users=u.data||[];
   const a=await db.rpc("export_attempts");att=a.data||[];
 }
-function tab(t){document.querySelectorAll("[data-t]").forEach(b=>b.className=b.dataset.t===t?"":"sec");["over","users","wrong","expl","cases","export"].forEach(x=>$("t_"+x).classList.toggle("hidden",x!==t));({over:rOver,users:rUsers,wrong:rWrong,expl:rExpl,cases:rCases,export:rExport})[t]();}
+function tab(t){document.querySelectorAll("[data-t]").forEach(b=>b.className=b.dataset.t===t?"":"sec");["over","users","wrong","expl","cases","tests","export"].forEach(x=>$("t_"+x).classList.toggle("hidden",x!==t));({over:rOver,users:rUsers,wrong:rWrong,expl:rExpl,cases:rCases,tests:rTests,export:rExport})[t]();}
 
 // ---------- overview ----------
 function rOver(){
@@ -144,6 +145,38 @@ async function rCases(){
 }
 
 // ---------- export ----------
+// ---------- tests ----------
+async function rTests(){
+  $("t_tests").innerHTML='<div class="card">Loading…</div>';
+  const admin=role==="admin";
+  const [st,sc]=await Promise.all([db.from("test_settings").select("*"),db.rpc("export_test_scores")]);
+  if(st.error||sc.error){$("t_tests").innerHTML=`<div class="card err">${esc((st.error||sc.error).message)}</div>`;return;}
+  const scores=sc.data||[];const stamp=new Date().toISOString().slice(0,10);
+  let h=`<div class="card"><h2>Baseline and endline tests</h2><p class="hint">Each test has 20 items (10 ICD-10, 10 ICD-11), marked automatically: 1 = accepted code, 0.5 = right category, 0 = otherwise. Students do not see marks. Forms A and B are counterbalanced: a student who sits A at baseline sits B at endline. Only enrolled students (with study ID and group) can start.</p>
+  <table><tr><th>Test</th><th>Status</th><th>Minutes</th><th>Started</th><th>Submitted</th><th>Form A / B</th>${admin?"<th></th>":""}</tr>`;
+  ["baseline","endline"].forEach(o=>{const t=(st.data||[]).find(x=>x.occasion===o)||{};const r=scores.filter(x=>x.occasion===o&&x.role==="student");
+    h+=`<tr><td><b>${o==="baseline"?"Baseline":"Endline"}</b></td><td>${t.is_open?'<span class="ok">Open</span>':"Closed"}</td><td>${admin?`<input type="text" id="min_${o}" value="${t.minutes||30}" size="3">`:t.minutes}</td><td>${r.length}</td><td>${r.filter(x=>x.submitted_at).length}</td><td>${r.filter(x=>x.form==="A").length} / ${r.filter(x=>x.form==="B").length}</td>${admin?`<td><button class="sm ${t.is_open?"sec":""}" data-tog="${o}" data-open="${t.is_open?0:1}">${t.is_open?"Close test":"Open test"}</button> <span id="tm_${o}" class="hint"></span></td>`:""}</tr>`;});
+  h+=`</table><p class="hint">Open a test only during the supervised session, and close it when the session ends. Students who have started keep their own timer.</p></div>`;
+  h+=`<div class="card"><h2>Results</h2><p><button id="tx1">Download scores (CSV)</button> <button class="sec" id="tx2">Download item responses (CSV)</button> <span id="txs" class="hint"></span></p><p class="hint">Scores: one row per student per test (total /20, ICD-10 /10, ICD-11 /10, exact matches, minutes used), by study ID and group, for the ANCOVA. Item responses: one row per item, for item analysis (difficulty, discrimination, reliability). No names are included.</p>
+  <table><tr><th>Study ID</th><th>Group</th><th>Test</th><th>Form</th><th>Status</th><th>Answered</th><th>Score /20</th>${admin?"<th></th>":""}</tr>${scores.map((x,i)=>`<tr><td>${esc(x.study_id||"(staff)")}</td><td>${esc(x.arm||"–")}</td><td>${esc(x.occasion)}</td><td>${esc(x.form)}</td><td>${x.submitted_at?(x.auto_submitted?"Submitted (time up)":"Submitted"):"In progress"}</td><td>${x.n_answered}</td><td>${x.submitted_at?x.total_score:"–"}</td>${admin?`<td><button class="sm sec" data-rs="${i}">Reset</button> <span id="rs${i}" class="hint"></span></td>`:""}</tr>`).join("")||`<tr><td colspan="8">No one has started a test yet.</td></tr>`}</table>${admin?'<p class="hint">Reset deletes a student\'s sitting and answers so they can start again. Use it only for a technical failure, and record the reason.</p>':""}</div>`;
+  h+=`<div class="card"><h2>Test items and answer keys</h2><p class="hint">For staff review only. All keys must be checked by expert coders before the baseline test is opened.</p><p><button class="sec sm" id="showItems">Show items</button></p><div id="itemList"></div></div>`;
+  $("t_tests").innerHTML=h;
+  document.querySelectorAll("[data-tog]").forEach(b=>b.onclick=async()=>{const o=b.dataset.tog,open=b.dataset.open==="1";
+    if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Click again to confirm";$("tm_"+o).textContent=open?"Students will be able to start now.":"No new students can start.";return;}
+    const {error}=await db.rpc("admin_test_control",{p_occasion:o,p_open:open,p_minutes:parseInt($("min_"+o).value)||30});
+    if(error){$("tm_"+o).innerHTML=`<span class="err">${esc(error.message)}</span>`;return;}rTests();});
+  document.querySelectorAll("[data-rs]").forEach(b=>b.onclick=async()=>{const x=scores[+b.dataset.rs],i=b.dataset.rs;
+    if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Click again to reset";$("rs"+i).textContent="Answers will be deleted.";return;}
+    const {error}=await db.rpc("admin_reset_sitting",{p_user:x.user_id,p_occasion:x.occasion});
+    if(error){$("rs"+i).innerHTML=`<span class="err">${esc(error.message)}</span>`;return;}rTests();});
+  $("tx1").onclick=async()=>{const {data,error}=await db.rpc("export_test_scores");if(error){$("txs").textContent=error.message;return;}
+    download(`codecoach_test_scores_${stamp}.csv`,csv(data,["study_id","arm","role","occasion","form","started_at","submitted_at","auto_submitted","minutes_used","n_answered","total_score","icd10_score","icd11_score","exact_correct"]));$("txs").textContent=`Exported ${data.length} rows.`;};
+  $("tx2").onclick=async()=>{const {data,error}=await db.rpc("export_test_responses");if(error){$("txs").textContent=error.message;return;}
+    download(`codecoach_test_items_${stamp}.csv`,csv(data,["study_id","arm","role","occasion","form","item_no","classification","answer","mark","is_exact"]));$("txs").textContent=`Exported ${data.length} rows.`;};
+  $("showItems").onclick=async()=>{const {data,error}=await db.rpc("staff_test_items");if(error){$("itemList").textContent=error.message;return;}
+    $("itemList").innerHTML=`<table><tr><th>Form</th><th>No.</th><th>Item</th><th>Key</th></tr>${data.map(x=>`<tr><td>${x.form}</td><td>${x.item_no}</td><td><b>${esc(x.classification)}</b> · ${esc(x.chapter)} · ${esc(x.difficulty)}<br>${esc(x.case_text)}</td><td>${esc(x.accepted_codes)}</td></tr>`).join("")}</table>`;};
+}
+
 function csv(rows,cols){const q=v=>{v=v===null||v===undefined?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};return [cols.join(","),...rows.map(r=>cols.map(c=>q(r[c])).join(","))].join("\r\n");}
 function download(name,text){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"text/csv"}));a.download=name;document.body.appendChild(a);a.click();a.remove();}
 function rExport(){

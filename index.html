@@ -42,6 +42,10 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{text-align:left;
 .big{font-size:1.8rem;font-weight:700;color:var(--blue)}
 .consent{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:.88rem;background:#fafbfc}
 .hidden{display:none}
+.banner{background:#fff4d6;border:1px solid #f0d58a;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.titem{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff}.titem input{text-transform:uppercase}
+.timer{position:sticky;top:0;z-index:5;background:var(--blue);color:#fff;border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-weight:600}
+.timer.low{background:#b3261e}
 footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24px}
 </style>
 </head>
@@ -88,7 +92,15 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   </section>
 
   <!-- APP -->
+  <section id="vTest" class="hidden">
+    <div class="timer" id="timerBar"><span id="testTitle">Test</span><span>Time left: <span id="timeLeft">--:--</span></span></div>
+    <div class="card"><p><b>Instructions.</b> Assign the code for the principal diagnosis in each record. You may use your ICD-10 books, the <a href="https://icd.who.int/browse10/2019/en" target="_blank" rel="noopener">WHO ICD-10 browser</a>, and the <a href="https://icd.who.int/ct11" target="_blank" rel="noopener">ICD-11 Coding Tool</a> / <a href="https://icd.who.int/browse/mms/en" target="_blank" rel="noopener">Browser</a>. Work on your own; do not discuss the items with anyone. Your answers save automatically. You will not see marks or correct answers. When time runs out, your test is submitted automatically.</p></div>
+    <div id="testItems"></div>
+    <div class="card"><div class="row"><button id="submitTest">Submit test</button><span id="submitMsg" class="hint"></span></div></div>
+  </section>
+
   <section id="vApp" class="hidden">
+    <div id="testBanner"></div>
     <div class="tabs"><button id="tPractice">Practise</button><button id="tWeak" class="sec">My weak areas</button></div>
     <div class="clsbar">Practise: <button class="sm" data-cls="Both">ICD-10 and ICD-11</button><button class="sm sec" data-cls="ICD-10">ICD-10 only</button><button class="sm sec" data-cls="ICD-11">ICD-11 only</button></div>
     <div id="pPractice" class="card">
@@ -113,7 +125,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   </section>
   <div id="globalMsg"></div>
 </main>
-<footer>CodeCoach pilot v0.4.1 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer>CodeCoach pilot v0.5 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 
 <script>
 // ---------- configuration (public key: safe in the app; data protected by database rules) ----------
@@ -121,7 +133,7 @@ const SUPABASE_URL="https://sdqnqbclwoqhouwuzaxv.supabase.co";
 const SUPABASE_KEY="sb_publishable_g0h4KFaS1FivbcTjIOzZfg_6URb05m8";
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=id=>document.getElementById(id);
-const show=v=>["vLogin","vConsent","vApp","vPw"].forEach(x=>$(x).classList.toggle("hidden",x!==v));
+const show=v=>["vLogin","vConsent","vApp","vPw","vTest"].forEach(x=>$(x).classList.toggle("hidden",x!==v));
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const msg=(id,text,kind="err")=>{$(id).innerHTML=text?`<div class="msg ${kind}">${esc(text)}</div>`:"";};
 let mode="in",user=null,allCases=[],clsChoice="Both",cases=[],attempts=[],cur=null,shownAt=0,hintUsed=false,answered=false,recent=[];
@@ -153,7 +165,7 @@ async function route(){
   if(!prof||!prof.consent_at){show("vConsent");return;}
   $("who").textContent=user.email+(prof.study_id?" · "+prof.study_id:"")+(prof.role!=="student"?" · "+prof.role:"");
   $("staffLink").classList.toggle("hidden",prof.role==="student");
-  show("vApp");await loadData();
+  show("vApp");await loadData();await checkTests();
 }
 
 // ---------- change password ----------
@@ -267,6 +279,61 @@ async function check(){
 }
 $("check").onclick=check;$("next").onclick=nextCase;
 $("code").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();answered?nextCase():check();}});
+
+// ---------- baseline / endline tests ----------
+const OCC={baseline:"Baseline test",endline:"Endline test"};
+let test=null,tick=null,saveTimers={};
+async function checkTests(){
+  $("testBanner").innerHTML="";
+  const {data,error}=await db.rpc("test_status");if(error||!Array.isArray(data))return;
+  const t=data.find(x=>x.state==="in progress")||data.find(x=>x.is_open&&x.state==="not started");
+  if(!t)return;
+  const going=t.state==="in progress";
+  $("testBanner").innerHTML=`<div class="banner"><div><b>${OCC[t.occasion]} ${going?"in progress":"is open"}.</b><br><span class="hint">${going?"Your time is still running. Return to the test now.":`20 coding items (10 ICD-10, 10 ICD-11), ${t.minutes} minutes, no feedback. Once you start, the timer cannot be paused.`}</span></div><button id="startTest">${going?"Return to test":"Start test"}</button></div>`;
+  $("startTest").onclick=async()=>{const b=$("startTest");
+    if(!going&&b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Click again to start the timer";return;}
+    b.disabled=true;await openTest(t.occasion);};
+}
+async function openTest(occ){
+  const {data,error}=await db.rpc("start_test",{p_occasion:occ});
+  if(error){$("testBanner").innerHTML=`<div class="msg err">${esc(error.message)}</div>`;return;}
+  test={occasion:occ,end:Date.now()+data.seconds_left*1000,items:data.items};
+  $("testTitle").textContent=OCC[occ];
+  let h="",part="";
+  data.items.forEach((it,i)=>{
+    if(it.classification!==part){part=it.classification;h+=`<h2 style="margin:14px 0 8px">${part==="ICD-10"?"Part A: ICD-10":"Part B: ICD-11"}</h2><p class="hint">${part==="ICD-10"?"Format: A00.0 (dot optional).":"Format: stem code such as 1A00.0; add extension codes with &amp; and further stem codes with / if the record supports them."}</p>`;}
+    h+=`<div class="titem"><div class="top"><b>Item ${it.item_no}</b><span class="tag cls">${esc(it.classification)}</span></div><div class="case">${esc(it.case_text)}</div><div class="row"><input type="text" id="ta${i}" maxlength="60" autocomplete="off" placeholder="${it.classification==="ICD-11"?"ICD-11 code":"ICD-10 code"}" value="${esc(it.answer||"")}"><span id="ts${i}" class="hint">${it.answer?"Saved":""}</span></div></div>`;});
+  $("testItems").innerHTML=h;
+  data.items.forEach((it,i)=>{const inp=$("ta"+i);
+    inp.addEventListener("input",()=>{$("ts"+i).textContent="…";clearTimeout(saveTimers[i]);saveTimers[i]=setTimeout(()=>saveAnswer(it,i),800);});
+    inp.addEventListener("blur",()=>{clearTimeout(saveTimers[i]);saveAnswer(it,i);});});
+  $("submitTest").disabled=false;$("submitTest").dataset.armed="";$("submitTest").textContent="Submit test";$("submitMsg").textContent="";
+  show("vTest");window.scrollTo(0,0);clearInterval(tick);tick=setInterval(updateTimer,1000);updateTimer();
+}
+async function saveAnswer(it,i){
+  if(!test)return;const v=$("ta"+i).value.trim();if(v===(it.answer||"")&&$("ts"+i).textContent==="Saved")return;
+  const {error}=await db.rpc("save_test_answer",{p_occasion:test.occasion,p_item:it.id,p_answer:v});
+  if(error){$("ts"+i).innerHTML=`<span style="color:var(--bad)">Not saved: ${esc(error.message)}</span>`;return;}
+  it.answer=v;$("ts"+i).textContent="Saved";
+}
+function updateTimer(){
+  if(!test)return;const s=Math.max(0,Math.round((test.end-Date.now())/1000));
+  $("timeLeft").textContent=String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+  $("timerBar").classList.toggle("low",s<=300);
+  if(s<=0)finishTest(true);
+}
+async function finishTest(auto){
+  if(!test)return;clearInterval(tick);const occ=test.occasion;
+  $("submitTest").disabled=true;$("submitMsg").textContent="Submitting…";
+  await Promise.all(test.items.map((it,i)=>{clearTimeout(saveTimers[i]);return saveAnswer(it,i);}));
+  const {data,error}=await db.rpc("submit_test",{p_occasion:occ});
+  if(error&&!auto){$("submitTest").disabled=false;$("submitMsg").textContent="Could not submit: "+error.message+". Try again.";tick=setInterval(updateTimer,1000);return;}
+  test=null;show("vApp");
+  $("testBanner").innerHTML=`<div class="msg info"><b>${OCC[occ]} submitted${auto?" (time up)":""}.</b> ${data?data.answered+" of 20 items answered. ":""}Thank you. Your answers have been recorded; marks are not shown during the study.</div>`;
+}
+$("submitTest").onclick=()=>{const b=$("submitTest");
+  if(b.dataset.armed!=="1"){b.dataset.armed="1";const n=test?test.items.filter((it,i)=>$("ta"+i).value.trim()).length:0;b.textContent="Click again to submit";$("submitMsg").textContent=`You have answered ${n} of 20. You cannot change your answers after submitting.`;return;}
+  finishTest(false);};
 
 // ---------- weak areas ----------
 function renderWeak(){
