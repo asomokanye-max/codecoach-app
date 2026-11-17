@@ -77,7 +77,7 @@ function rOver(){
   const st=att.filter(x=>x.role==="student");const students=users.filter(u=>u.role==="student");
   const acc=st.length?Math.round(st.filter(x=>x.is_correct).length/st.length*100)+"%":"–";
   let h=`<div class="tiles">${[[students.length,"Student accounts"],[students.filter(u=>u.consent_at).length,"Consented"],[students.filter(u=>u.study_id&&u.arm).length,"Enrolled (ID and group)"],[st.length,"Student attempts"],[acc,"Student accuracy"]].map(([n,l])=>`<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("")}</div>`;
-  const by={};st.forEach(x=>{by[x.chapter]=by[x.chapter]||{n:0,ok:0};by[x.chapter].n++;if(x.is_correct)by[x.chapter].ok++;});
+  const by={};st.forEach(x=>{const k=(x.classification||"ICD-10")+" · "+x.chapter;by[k]=by[k]||{n:0,ok:0};by[k].n++;if(x.is_correct)by[k].ok++;});
   const rows=Object.entries(by).sort((a,b)=>a[1].ok/a[1].n-b[1].ok/b[1].n);
   h+=`<div class="card"><h2>Class accuracy by chapter (students only)</h2><table><tr><th>Chapter</th><th>Correct / attempts</th><th style="width:35%"></th></tr>${rows.length?rows.map(([c,v])=>{const p=Math.round(v.ok/v.n*100);const col=p>=80?"#2e8b57":p>=50?"#d39b00":"#c0392b";return `<tr><td>${esc(c)}</td><td>${v.ok}/${v.n} (${p}%)</td><td><div class="bar"><div style="width:${p}%;background:${col}"></div></div></td></tr>`}).join(""):'<tr><td colspan="3">No student attempts yet.</td></tr>'}</table></div>`;
   const er={};st.forEach(x=>{if(x.error_type)er[x.error_type]=(er[x.error_type]||0)+1;});
@@ -140,7 +140,7 @@ async function rCases(){
   if(c.error){$("t_cases").innerHTML=`<div class="card err">${esc(c.error.message)}</div>`;return;}
   const codes={},notes={};(k.data||[]).forEach(x=>(codes[x.case_id]=codes[x.case_id]||[]).push(x.code));(w.data||[]).forEach(x=>(notes[x.case_id]=notes[x.case_id]||[]).push(x.wrong_code));
   const tries={};att.filter(x=>x.role==="student").forEach(x=>{tries[x.case_no]=tries[x.case_no]||{n:0,ok:0};tries[x.case_no].n++;if(x.is_correct)tries[x.case_no].ok++;});
-  $("t_cases").innerHTML=`<div class="card"><h2>Case bank (${c.data.length} cases)</h2><p class="hint">To write, code or approve cases, open the <a href="cases.html">Case workshop</a>.</p><table><tr><th>No.</th><th>Case</th><th>Chapter / level</th><th>Accepted</th><th>Notes on wrong codes</th><th>Status</th><th>Student accuracy</th></tr>${c.data.map(x=>{const t=tries[x.case_no];return `<tr><td>${x.case_no}</td><td>${esc(x.case_text)}<div class="hint">Lead term: ${esc(x.lead_term||"–")}</div></td><td>${esc(x.chapter)}<br>${esc(x.difficulty)}</td><td>${esc((codes[x.id]||[]).join(", "))}</td><td>${esc((notes[x.id]||[]).join(", ")||"–")}</td><td>${esc(x.status)}</td><td>${t?`${t.ok}/${t.n}`:"–"}</td></tr>`}).join("")}</table></div>`;
+  $("t_cases").innerHTML=`<div class="card"><h2>Case bank (${c.data.length} cases)</h2><p class="hint">To write, code or approve cases, open the <a href="cases.html">Case workshop</a>.</p><table><tr><th>No.</th><th>Case</th><th>Chapter / level</th><th>Accepted</th><th>Notes on wrong codes</th><th>Status</th><th>Student accuracy</th></tr>${c.data.map(x=>{const t=tries[x.case_no];return `<tr><td>${x.case_no}</td><td>${esc(x.case_text)}<div class="hint">Lead term: ${esc(x.lead_term||"–")}</div></td><td><b>${esc(x.classification||"ICD-10")}</b><br>${esc(x.chapter)}<br>${esc(x.difficulty)}</td><td>${esc((codes[x.id]||[]).join(", "))}</td><td>${esc((notes[x.id]||[]).join(", ")||"–")}</td><td>${esc(x.status)}</td><td>${t?`${t.ok}/${t.n}`:"–"}</td></tr>`}).join("")}</table></div>`;
 }
 
 // ---------- export ----------
@@ -150,7 +150,7 @@ function rExport(){
   const stamp=new Date().toISOString().slice(0,10);
   $("t_export").innerHTML=`<div class="card"><h2>Export data for analysis</h2><p class="hint">Files contain study IDs, never names. Store them in the encrypted study folder. Import into Stata with: <code>import delimited using "filename.csv", clear varnames(1)</code></p>
   <p><button id="x1">Download all attempts (CSV)</button></p><p><button id="x2" class="sec">Download participant list without names (CSV)</button></p><div id="xs" class="hint"></div></div>`;
-  $("x1").onclick=async()=>{await loadCore();download(`codecoach_attempts_${stamp}.csv`,csv(att,["attempt_id","study_id","arm","role","case_no","chapter","difficulty","code_entered","is_correct","error_type","hint_used","seconds","created_at"]));$("xs").textContent=`Exported ${att.length} attempts.`;};
+  $("x1").onclick=async()=>{await loadCore();download(`codecoach_attempts_${stamp}.csv`,csv(att,["attempt_id","study_id","arm","role","case_no","classification","chapter","difficulty","code_entered","is_correct","error_type","hint_used","seconds","created_at"]));$("xs").textContent=`Exported ${att.length} attempts.`;};
   $("x2").onclick=async()=>{await loadCore();download(`codecoach_participants_${stamp}.csv`,csv(users,["study_id","arm","role","consent_at","created_at"]));$("xs").textContent=`Exported ${users.length} accounts.`;};
 }
 start();

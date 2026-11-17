@@ -51,6 +51,8 @@ const SUPABASE_KEY="sb_publishable_g0h4KFaS1FivbcTjIOzZfg_6URb05m8";
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const CH11=["01 Certain infectious or parasitic diseases","02 Neoplasms","03 Diseases of the blood or blood-forming organs","04 Diseases of the immune system","05 Endocrine, nutritional or metabolic diseases","06 Mental, behavioural or neurodevelopmental disorders","07 Sleep-wake disorders","08 Diseases of the nervous system","09 Diseases of the visual system","10 Diseases of the ear or mastoid process","11 Diseases of the circulatory system","12 Diseases of the respiratory system","13 Diseases of the digestive system","14 Diseases of the skin","15 Diseases of the musculoskeletal system or connective tissue","16 Diseases of the genitourinary system","17 Conditions related to sexual health","18 Pregnancy, childbirth or the puerperium","19 Certain conditions originating in the perinatal period","20 Developmental anomalies","21 Symptoms, signs or clinical findings, not elsewhere classified","22 Injury, poisoning or certain other consequences of external causes","23 External causes of morbidity or mortality","24 Factors influencing health status or contact with health services","25 Codes for special purposes","26 Traditional medicine conditions"];
+const FMT={"ICD-10":"e.g. B50.9","ICD-11":"e.g. 1A00.0, or a cluster such as stem&X... or stem/stem"};
 const CHAPTERS=["I Infectious and parasitic","II Neoplasms","III Blood and immune","IV Endocrine and metabolic","V Mental and behavioural","VI Nervous system","VII Eye","VIII Ear","IX Circulatory","X Respiratory","XI Digestive","XII Skin","XIII Musculoskeletal","XIV Genitourinary","XV Pregnancy and childbirth","XVI Perinatal","XVII Congenital","XVIII Symptoms and signs","XIX Injury","XX External causes","XXI Factors influencing health status","XXII Special purposes"];
 const REL=["","1 Not relevant","2 Somewhat relevant","3 Quite relevant","4 Highly relevant"],CLA=["","1 Not clear","2 Somewhat clear","3 Quite clear","4 Very clear"];
 let me=null,role=null,cases=[],editing=null,listFilter="action";
@@ -76,7 +78,7 @@ async function rCode(){
   const {data,error}=await db.rpc("coding_queue");
   if(error){$("t_code").innerHTML=`<div class="card">${errMsg(error)}</div>`;return;}
   const code=data.filter(x=>x.task==="code"),dec=data.filter(x=>x.task==="decide");
-  let h=`<div class="card"><h2>Cases to code (${code.length})</h2><p class="hint">Code each case on your own, using the ICD-10 index and tabular list, as you would a real record. You will not see the author's code or the other coder's code. Then rate how relevant the case is to SHIM coding training and how clearly it is written.</p>`;
+  let h=`<div class="card"><h2>Cases to code (${code.length})</h2><p class="hint">Code each case on your own, as you would a real record: ICD-10 cases with the ICD-10 index and tabular list, ICD-11 cases with the <a href="https://icd.who.int/ct11" target="_blank" rel="noopener">ICD-11 Coding Tool</a> and <a href="https://icd.who.int/browse/mms/en" target="_blank" rel="noopener">Browser</a> (include extension codes with &amp; and extra stem codes with / where the record supports them). You will not see the author's code or the other coder's code. Then rate how relevant the case is to SHIM coding training and how clearly it is written.</p>`;
   h+=code.length?code.map((x,i)=>item(x,"c"+i)).join(""):'<p>No cases are waiting for you. Well done.</p>';
   h+=`</div><div class="card"><h2>Third-coder decisions (${dec.length})</h2><p class="hint">The two coders gave different codes. Read the case, check the author's code and both coders' codes, then enter the correct final code. If your code is not the author's, it replaces the author's answer key.</p>`;
   h+=dec.length?dec.map((x,i)=>item(x,"d"+i)).join(""):'<p>No disagreements are waiting for a decision.</p>';
@@ -84,9 +86,9 @@ async function rCode(){
   [...code.map((x,i)=>[x,"c"+i]),...dec.map((x,i)=>[x,"d"+i])].forEach(([x,k])=>$("go"+k).onclick=()=>submitCode(x,k));
 }
 function item(x,k){
-  return `<div class="item"><div><b>Case ${x.case_no}</b> <span class="pill">${esc(x.chapter)}</span> <span class="pill">${esc(x.difficulty)}</span></div><p>${esc(x.case_text)}</p>`+
+  return `<div class="item"><div><b>Case ${x.case_no}</b> <span class="pill go">${esc(x.classification||"ICD-10")}</span> <span class="pill">${esc(x.chapter)}</span> <span class="pill">${esc(x.difficulty)}</span></div><p>${esc(x.case_text)}</p>`+
   (x.task==="decide"?`<p>Author's code: <b>${esc(x.author_codes)}</b> · Coder 1: <b>${esc(x.coder1_code)}</b> · Coder 2: <b>${esc(x.coder2_code)}</b></p>`:"")+
-  `<div class="row"><div><label>${x.task==="decide"?"Final code":"Your code"}</label><input type="text" id="cd${k}" placeholder="e.g. B50.9" autocomplete="off"></div><div><label>Relevance</label>${sel("rl"+k,REL,"")}</div><div><label>Clarity</label>${sel("cl"+k,CLA,"")}</div></div>`+
+  `<div class="row"><div><label>${x.task==="decide"?"Final code":"Your code"}</label><input type="text" id="cd${k}" placeholder="${FMT[x.classification||"ICD-10"]}" autocomplete="off"></div><div><label>Relevance</label>${sel("rl"+k,REL,"")}</div><div><label>Clarity</label>${sel("cl"+k,CLA,"")}</div></div>`+
   `<label>Comment (optional: what is unclear or should change)</label><textarea id="cm${k}"></textarea><p><button id="go${k}">${x.task==="decide"?"Save decision":"Submit code"}</button> <span id="st${k}"></span></p></div>`;
 }
 async function submitCode(x,k){
@@ -103,13 +105,16 @@ function rWrite(){
   const c=editing||{};
   $("t_write").innerHTML=`<div class="card"><h2>${editing?"Edit case "+c.case_no:"Write a new case"}</h2>
   <p class="hint">Write a short, realistic case summary like a discharge note. Use invented details only: no real patient names, hospital numbers or dates. Save as a draft as often as you like. When it is ready, send it for coding; it can no longer be edited unless the admin returns it to draft.</p>
+  <label>Classification</label><select id="wCls"><option ${(c.classification||"ICD-10")==="ICD-10"?"selected":""}>ICD-10</option><option ${c.classification==="ICD-11"?"selected":""}>ICD-11</option></select>
   <label>Case text</label><textarea id="wText" style="min-height:110px">${esc(c.case_text)}</textarea>
-  <div class="row"><div><label>Chapter</label><select id="wChap"><option value="">Choose…</option>${CHAPTERS.map(x=>`<option ${x===c.chapter?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
+  <div class="row"><div><label>Chapter</label><select id="wChap"></select></div>
   <div><label>Difficulty</label><select id="wDiff"><option value="">Choose…</option>${["Easy","Medium","Hard"].map(x=>`<option ${x===c.difficulty?"selected":""}>${x}</option>`).join("")}</select></div></div>
   <label>Accepted code(s)</label><input type="text" id="wCodes" style="width:100%" value="${esc(c.codes)}" placeholder="e.g. B50.9   (if more than one code is acceptable, separate with commas; the first is the main code)">
   <label>Hint: index path (lead term)</label><input type="text" id="wLead" style="width:100%" value="${esc(c.lead_term)}" placeholder="e.g. Malaria → falciparum">
   <label>Explanation shown after the student answers</label><textarea id="wExpl">${esc(c.explanation)}</textarea>
   <p><button id="wSave" class="sec">Save draft</button> <button id="wSend">Send for coding</button> ${editing?'<button id="wNew" class="sec">Start a new case instead</button>':""} <span id="wSt"></span></p></div>`;
+  const fillCh=()=>{const cl=$("wCls").value,list=cl==="ICD-11"?CH11:CHAPTERS,cur=$("wChap").value||c.chapter;$("wChap").innerHTML='<option value="">Choose…</option>'+list.map(x=>`<option ${x===cur?"selected":""}>${esc(x)}</option>`).join("");$("wCodes").placeholder=(cl==="ICD-11"?"e.g. 1A00.0&X... ":"e.g. B50.9 ")+" (if more than one answer is acceptable, separate with commas; the first is the main answer)";};
+  $("wCls").onchange=fillCh;fillCh();
   $("wSave").onclick=()=>saveCase(false);$("wSend").onclick=()=>saveCase(true);
   if(editing)$("wNew").onclick=()=>{editing=null;rWrite();};
 }
@@ -118,11 +123,11 @@ async function saveCase(submit){
   if(submit&&b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Click again to send";$("wSt").textContent="After sending you cannot edit it.";return;}
   b.dataset.armed="";b.textContent=submit?"Send for coding":"Save draft";b.disabled=true;$("wSt").textContent="Saving…";
   const {data,error}=await db.rpc("author_save_case",{p_id:editing?.case_id||null,p_text:$("wText").value,p_chapter:$("wChap").value,p_difficulty:$("wDiff").value,
-    p_lead:$("wLead").value,p_expl:$("wExpl").value,p_codes:$("wCodes").value.split(/[,;]/),p_submit:submit});
+    p_lead:$("wLead").value,p_expl:$("wExpl").value,p_codes:$("wCodes").value.split(/[,;]/),p_submit:submit,p_class:$("wCls").value});
   b.disabled=false;
   if(error){$("wSt").innerHTML=errMsg(error);return;}
   if(submit){editing=null;rWrite();$("wSt").innerHTML='<span class="ok">Sent for coding. Two other staff will now code it blind. Follow it under "'+(role==="admin"?"All cases":"My cases")+'".</span>';}
-  else{editing={case_id:data,case_text:$("wText").value,chapter:$("wChap").value,difficulty:$("wDiff").value,codes:$("wCodes").value,lead_term:$("wLead").value,explanation:$("wExpl").value,case_no:editing?.case_no||"(draft)"};$("wSt").innerHTML='<span class="ok">Draft saved.</span>';}
+  else{editing={case_id:data,classification:$("wCls").value,case_text:$("wText").value,chapter:$("wChap").value,difficulty:$("wDiff").value,codes:$("wCodes").value,lead_term:$("wLead").value,explanation:$("wExpl").value,case_no:editing?.case_no||"(draft)"};$("wSt").innerHTML='<span class="ok">Draft saved.</span>';}
 }
 
 // ---------- list ----------
@@ -144,8 +149,9 @@ async function rList(){
     if(admin&&ready)a+=`<button class="sm" data-act="approve" data-i="${i}">Approve for students</button> `;
     if(admin&&x.status==="review")a+=`<button class="sm sec" data-act="return" data-i="${i}">Return to draft</button> `;
     if(admin&&x.status==="approved")a+=`<button class="sm sec" data-act="retire" data-i="${i}">Retire</button> `;
+    if(x.status==="approved")a+=`<button class="sm sec" data-act="copy" data-i="${i}">Make ${x.classification==="ICD-11"?"ICD-10":"ICD-11"} version</button> `;
     if(admin&&x.status==="retired")a+=`<button class="sm sec" data-act="restore" data-i="${i}">Restore</button> `;
-    return `<div class="item"><div><b>Case ${x.case_no}</b> <span class="pill ${cls}">${esc(x.stage)}</span> <span class="pill">${esc(x.chapter)}</span> <span class="pill">${esc(x.difficulty)}</span>${admin&&x.author?` <span class="hint">by ${esc(x.author)}</span>`:""}</div>
+    return `<div class="item"><div><b>Case ${x.case_no}</b> <span class="pill go">${esc(x.classification||"ICD-10")}</span> <span class="pill ${cls}">${esc(x.stage)}</span> <span class="pill">${esc(x.chapter)}</span> <span class="pill">${esc(x.difficulty)}</span>${admin&&x.author?` <span class="hint">by ${esc(x.author)}</span>`:""}</div>
     <p>${esc(x.case_text)}</p><p class="hint">Accepted: <b>${esc(x.codes||"–")}</b> · Hint: ${esc(x.lead_term||"–")}<br>Explanation: ${esc(x.explanation||"–")}</p>`+
     (x.coder1_code||x.coder2_code?`<p class="hint">Coder 1: <b>${esc(x.coder1_code||"–")}</b> · Coder 2: <b>${esc(x.coder2_code||"–")}</b>${x.adjudicated_code?` · Third coder: <b>${esc(x.adjudicated_code)}</b>`:""}</p>`:"")+
     (x.cvi_relevance!=null?`<p class="hint ${low?"err":""}">CVI relevance ${x.cvi_relevance} · clarity ${x.cvi_clarity}${x.comments?` · Comments: ${esc(x.comments)}`:""}</p>`:"")+
@@ -157,6 +163,10 @@ async function rList(){
 async function caseAction(b,x){
   const act=b.dataset.act,i=b.dataset.i;
   if(act==="edit"){editing={...x};tab("write");return;}
+  if(act==="copy"){b.disabled=true;const to=x.classification==="ICD-11"?"ICD-10":"ICD-11";const {data,error}=await db.rpc("copy_case_as",{p_case:x.case_id,p_class:to});
+    if(error){b.disabled=false;$("ls"+i).innerHTML=errMsg(error);return;}
+    editing={case_id:data,case_no:"(new "+to+" draft)",classification:to,case_text:x.case_text,chapter:"",difficulty:x.difficulty,codes:"",lead_term:"",explanation:""};tab("write");
+    $("wSt").innerHTML='<span class="ok">Draft copy made. Choose the chapter, then enter the '+to+' code(s), hint and explanation, checked against the official '+to+' tools.</span>';return;}
   if(b.dataset.armed!=="1"){b.dataset.armed="1";b.dataset.label=b.textContent;b.textContent="Click again to confirm";
     $("ls"+i).textContent={approve:"Students will start seeing this case.",return:"Coding results for this case will be cleared.",retire:"Students will no longer see this case.",restore:"Students will see this case again."}[act];return;}
   b.disabled=true;const {error}=await db.rpc("admin_case_action",{p_case:x.case_id,p_action:act});
@@ -165,6 +175,6 @@ async function caseAction(b,x){
 }
 start();
 </script>
-<footer style="text-align:center;font-size:.75rem;color:#5b6575;padding:12px">CodeCoach case workshop v0.4 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer style="text-align:center;font-size:.75rem;color:#5b6575;padding:12px">CodeCoach case workshop v0.5 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 </body>
 </html>

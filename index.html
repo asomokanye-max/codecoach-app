@@ -28,6 +28,8 @@ button:disabled{opacity:.5;cursor:default}
 .msg.info{background:#eef5fb;color:#1c3d5e}
 .tabs{display:flex;gap:6px;margin-bottom:12px}.tabs button{flex:1}
 .top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:.85rem;color:var(--mut)}
+.clsbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:.85rem;margin:-4px 0 12px}.clsbar button{flex:0 0 auto;font-size:.8rem;padding:6px 10px}
+.tag.cls{background:#1F4E79;color:#fff}
 .tag{display:inline-block;background:#e8f0f8;color:var(--blue);border-radius:999px;padding:2px 10px;font-size:.75rem;font-weight:600}
 .case{white-space:pre-line;background:#fafbfc;border-left:4px solid var(--blue2);padding:10px 12px;border-radius:6px;margin:10px 0}
 #code{flex:1;text-transform:uppercase}
@@ -88,14 +90,15 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   <!-- APP -->
   <section id="vApp" class="hidden">
     <div class="tabs"><button id="tPractice">Practise</button><button id="tWeak" class="sec">My weak areas</button></div>
+    <div class="clsbar">Practise: <button class="sm" data-cls="Both">ICD-10 and ICD-11</button><button class="sm sec" data-cls="ICD-10">ICD-10 only</button><button class="sm sec" data-cls="ICD-11">ICD-11 only</button></div>
     <div id="pPractice" class="card">
-      <div class="top"><span id="counter"></span><span><span class="tag" id="chapter"></span> <span class="tag" id="level"></span></span></div>
+      <div class="top"><span id="counter"></span><span><span class="tag cls" id="clsTag"></span> <span class="tag" id="chapter"></span> <span class="tag" id="level"></span></span></div>
       <div class="case" id="caseText">Loading cases…</div>
-      <label for="code">Assign the ICD-10 code for the principal diagnosis</label>
-      <div class="row"><input id="code" type="text" placeholder="Type your code" autocomplete="off" maxlength="8"><button id="check">Check</button></div>
-      <div class="lookup"><b>Look it up, don't guess.</b> Find the lead term in the Alphabetical Index (Volume 3), then confirm the code in the Tabular List (Volume 1). Use your ICD-10 books or the <a href="https://icd.who.int/browse10/2019/en" target="_blank" rel="noopener">WHO ICD-10 online browser</a>.
+      <label for="code" id="codeLabel">Assign the ICD-10 code for the principal diagnosis</label>
+      <div class="row"><input id="code" type="text" placeholder="Type your code" autocomplete="off" maxlength="60"><button id="check">Check</button></div>
+      <div class="lookup"><b>Look it up, don't guess.</b> <span id="lookupText"></span>
         <div class="row" style="margin-top:8px"><button class="sec" id="hintBtn" type="button">Stuck? Show the Index lead term</button></div><div id="hintText" class="hint"></div></div>
-      <div class="hint">Example format: A00.0. The dot is optional.</div>
+      <div class="hint" id="fmtHint"></div>
       <div id="feedback"></div>
       <div class="row" style="justify-content:flex-end;margin-top:12px"><button id="next" disabled>Next case</button></div>
     </div>
@@ -104,13 +107,13 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
         <div><div class="big" id="sMastered">–</div><div class="hint">Cases answered correctly</div></div>
         <div><div class="big" id="sAcc">–</div><div class="hint">Accuracy (all attempts)</div></div>
         <div><div class="big" id="sHints">–</div><div class="hint">Hints used</div></div></div></div>
-      <div class="card"><h2>Accuracy by ICD-10 chapter</h2><table><thead><tr><th>Chapter</th><th>Correct</th><th style="width:35%"></th></tr></thead><tbody id="chapTable"></tbody></table><p class="hint" id="advice"></p></div>
+      <div class="card"><h2>Accuracy by chapter</h2><table><thead><tr><th>Chapter</th><th>Correct</th><th style="width:35%"></th></tr></thead><tbody id="chapTable"></tbody></table><p class="hint" id="advice"></p></div>
       <div class="card"><h2>Your most common error types</h2><table><tbody id="errTable"></tbody></table></div>
     </div>
   </section>
   <div id="globalMsg"></div>
 </main>
-<footer>CodeCoach pilot v0.3 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer>CodeCoach pilot v0.4 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 
 <script>
 // ---------- configuration (public key: safe in the app; data protected by database rules) ----------
@@ -121,7 +124,7 @@ const $=id=>document.getElementById(id);
 const show=v=>["vLogin","vConsent","vApp","vPw"].forEach(x=>$(x).classList.toggle("hidden",x!==v));
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const msg=(id,text,kind="err")=>{$(id).innerHTML=text?`<div class="msg ${kind}">${esc(text)}</div>`:"";};
-let mode="in",user=null,cases=[],attempts=[],cur=null,shownAt=0,hintUsed=false,answered=false,recent=[];
+let mode="in",user=null,allCases=[],clsChoice="Both",cases=[],attempts=[],cur=null,shownAt=0,hintUsed=false,answered=false,recent=[];
 
 // ---------- authentication ----------
 function setMode(m){mode=m;$("tIn").className=m==="in"?"":"sec";$("tUp").className=m==="up"?"":"sec";$("authBtn").textContent=m==="in"?"Log in":"Create account";$("pw").autocomplete=m==="in"?"current-password":"new-password";msg("authMsg","");}
@@ -189,13 +192,27 @@ $("consentBtn").onclick=async()=>{
 
 // ---------- data ----------
 async function loadData(){
-  const a=await db.from("cases").select("id,case_no,case_text,chapter,difficulty").eq("status","approved").order("case_no");
+  const a=await db.from("cases").select("id,case_no,case_text,chapter,difficulty,classification").eq("status","approved").order("case_no");
   if(a.error){$("caseText").textContent="Could not load cases: "+a.error.message;return;}
-  cases=a.data;
+  allCases=a.data;try{clsChoice=localStorage.getItem("cc_cls")||"Both";}catch(e){}applyCls();
   const b=await db.from("attempts").select("case_id,is_correct,error_type,hint_used,created_at").eq("user_id",user.id).order("created_at");
   attempts=b.error?[]:b.data;
   nextCase();
 }
+
+// ---------- ICD-10 / ICD-11 choice ----------
+const GUIDE={"ICD-10":{label:"Assign the ICD-10 code for the principal diagnosis",
+  look:'Find the lead term in the Alphabetical Index (Volume 3), then confirm the code in the Tabular List (Volume 1). Use your ICD-10 books or the <a href="https://icd.who.int/browse10/2019/en" target="_blank" rel="noopener">WHO ICD-10 online browser</a>.',
+  fmt:"Example format: A00.0. The dot is optional.",bad:"That does not look like an ICD-10 code. Format: a letter, two digits, then an optional dot and one or two characters (e.g. A00.0)."},
+ "ICD-11":{label:"Assign the ICD-11 code for the principal diagnosis (add extension codes if the record supports them)",
+  look:'Search the term in the <a href="https://icd.who.int/ct11" target="_blank" rel="noopener">WHO ICD-11 Coding Tool</a>, then confirm the entity, its inclusions and exclusions, and any "use additional code" notes in the <a href="https://icd.who.int/browse/mms/en" target="_blank" rel="noopener">ICD-11 Browser</a>. Choose the most specific code the record supports.',
+  fmt:"Format: a stem code such as 1A00.0. Add an extension code with & (stem&X...). Join a second stem code with / (stem/stem). Spaces and order of extension codes do not matter.",
+  bad:"That does not look like an ICD-11 code. A stem code has four characters (e.g. 1A00), optionally a dot and one or two more (1A00.0). Extension codes start with X and are joined with &; extra stem codes are joined with /."}};
+function applyCls(){
+  cases=clsChoice==="Both"?allCases:allCases.filter(c=>(c.classification||"ICD-10")===clsChoice);
+  document.querySelectorAll("[data-cls]").forEach(b=>b.className="sm"+(b.dataset.cls===clsChoice?"":" sec"));
+}
+document.querySelectorAll("[data-cls]").forEach(b=>b.onclick=()=>{clsChoice=b.dataset.cls;try{localStorage.setItem("cc_cls",clsChoice);}catch(e){}applyCls();recent=[];nextCase();if(!$("pWeak").classList.contains("hidden"))renderWeak();});
 
 // ---------- adaptive case selection ----------
 function chapterErrorRate(ch){const ids=new Set(cases.filter(c=>c.chapter===ch).map(c=>c.id));const at=attempts.filter(x=>ids.has(x.case_id));return at.length?at.filter(x=>!x.is_correct).length/at.length:0.5;}
@@ -215,7 +232,8 @@ function pickNext(){
 }
 function nextCase(){
   cur=pickNext();answered=false;hintUsed=false;
-  if(!cur){$("caseText").textContent="No cases available yet.";return;}
+  if(!cur){$("caseText").textContent=clsChoice==="Both"?"No cases available yet.":"No "+clsChoice+" cases are available yet. Your tutors are preparing them; choose another option above.";$("code").disabled=true;$("check").disabled=true;$("clsTag").textContent="";$("chapter").textContent="";$("level").textContent="";$("counter").textContent="";return;}
+  const G=GUIDE[cur.classification||"ICD-10"];$("clsTag").textContent=cur.classification||"ICD-10";$("codeLabel").textContent=G.label;$("lookupText").innerHTML=G.look;$("fmtHint").textContent=G.fmt;$("code").placeholder=cur.classification==="ICD-11"?"e.g. 1A00.0":"Type your code";
   recent=[cur.id,...recent].slice(0,3);
   const solved=new Set(attempts.filter(x=>x.is_correct).map(x=>x.case_id)).size;
   $("counter").textContent=`Case ${cur.case_no} · ${solved} of ${cases.length} answered correctly`;
@@ -240,29 +258,30 @@ async function check(){
   $("check").disabled=true;
   const {data,error}=await db.rpc("check_answer",{p_case:cur.id,p_code:raw,p_hint:hintUsed,p_seconds:Math.round((Date.now()-shownAt)/1000)});
   if(error){$("check").disabled=false;$("feedback").innerHTML=`<div class="fb bad"><b>Could not check your answer.</b>${esc(error.message)}. Check your internet connection and try again.</div>`;return;}
-  if(!data.valid_format){$("check").disabled=false;$("feedback").innerHTML='<div class="fb part"><b>That does not look like an ICD-10 code.</b>Format: a letter, two digits, then an optional dot and one or two characters (e.g. A00.0).</div>';return;}
+  if(!data.valid_format){$("check").disabled=false;const t=GUIDE[data.classification||"ICD-10"].bad.split(". ");$("feedback").innerHTML=`<div class="fb part"><b>${esc(t[0])}.</b>${esc(t.slice(1).join(". "))}</div>`;return;}
   answered=true;$("code").disabled=true;$("next").disabled=false;$("next").focus();
   attempts.push({case_id:cur.id,is_correct:data.correct,error_type:data.error_type,hint_used:hintUsed,created_at:new Date().toISOString()});
   const why=`<div class="why">${data.note?esc(data.note)+"<br><br>":""}${esc(data.explanation||"")}</div>`;
   if(data.correct)$("feedback").innerHTML=`<div class="fb ok"><b>Correct: ${esc(data.code)}</b>${why}</div>`;
-  else{const part=/subdivision|fourth/i.test(data.error_type||"");$("feedback").innerHTML=`<div class="fb ${part?"part":"bad"}"><b>${part?"Almost":"Not correct"}: you entered ${esc(data.code)}. Correct answer: ${esc(data.correct_code)}</b>Error type: ${esc(data.error_type)}.${why}</div>`;}
+  else{const part=/subdivision|fourth|subcategory|extension|specific|stem code/i.test(data.error_type||"");$("feedback").innerHTML=`<div class="fb ${part?"part":"bad"}"><b>${part?"Almost":"Not correct"}: you entered ${esc(data.code)}. Correct answer: ${esc(data.correct_code)}</b>Error type: ${esc(data.error_type)}.${why}</div>`;}
 }
 $("check").onclick=check;$("next").onclick=nextCase;
 $("code").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();answered?nextCase():check();}});
 
 // ---------- weak areas ----------
 function renderWeak(){
-  const solved=new Set(attempts.filter(x=>x.is_correct).map(x=>x.case_id)).size;
+  const ids=new Set(cases.map(c=>c.id)),att=attempts.filter(x=>ids.has(x.case_id));
+  const solved=new Set(att.filter(x=>x.is_correct).map(x=>x.case_id)).size;
   $("sMastered").textContent=`${solved}/${cases.length}`;
-  $("sAcc").textContent=attempts.length?Math.round(attempts.filter(x=>x.is_correct).length/attempts.length*100)+"%":"–";
-  $("sHints").textContent=attempts.filter(x=>x.hint_used).length;
-  const chOf={};cases.forEach(c=>chOf[c.id]=c.chapter);const by={};
-  attempts.forEach(x=>{const ch=chOf[x.case_id];if(!ch)return;by[ch]=by[ch]||{n:0,ok:0};by[ch].n++;if(x.is_correct)by[ch].ok++;});
+  $("sAcc").textContent=att.length?Math.round(att.filter(x=>x.is_correct).length/att.length*100)+"%":"–";
+  $("sHints").textContent=att.filter(x=>x.hint_used).length;
+  const chOf={};cases.forEach(c=>chOf[c.id]=(c.classification||"ICD-10")+" · "+c.chapter);const by={};
+  att.forEach(x=>{const ch=chOf[x.case_id];if(!ch)return;by[ch]=by[ch]||{n:0,ok:0};by[ch].n++;if(x.is_correct)by[ch].ok++;});
   const rows=Object.entries(by).sort((a,b)=>a[1].ok/a[1].n-b[1].ok/b[1].n);
-  $("chapTable").innerHTML=rows.length?rows.map(([ch,v])=>{const p=Math.round(v.ok/v.n*100);const col=p>=80?"#2e8b57":p>=50?"#d39b00":"#c0392b";return `<tr><td>${esc(ch)}</td><td>${v.ok}/${v.n}</td><td><div class="bar"><div style="width:${p}%;background:${col}"></div></div></td></tr>`;}).join(""):'<tr><td colspan="3">No attempts yet.</td></tr>';
+  $("chapTable").innerHTML=rows.length?rows.map(([ch,v])=>{const p=Math.round(v.ok/v.n*100);const col=p>=80?"#2e8b57":p>=50?"#d39b00":"#c0392b";return `<tr><td>${esc(ch)}</td><td>${v.ok}/${v.n}</td><td><div class="bar"><div style="width:${p}%;background:${col}"></div></div></td></tr>`;}).join(""):'<tr><td colspan="3">No att yet.</td></tr>';
   const weak=rows.filter(([,v])=>v.ok/v.n<0.8).map(([ch])=>ch);
   $("advice").textContent=weak.length?"CodeCoach will give you more cases from: "+weak.slice(0,2).join("; ")+".":"";
-  const errs={};attempts.forEach(x=>{if(x.error_type)errs[x.error_type]=(errs[x.error_type]||0)+1;});
+  const errs={};att.forEach(x=>{if(x.error_type)errs[x.error_type]=(errs[x.error_type]||0)+1;});
   const e=Object.entries(errs).sort((a,b)=>b[1]-a[1]);
   $("errTable").innerHTML=e.length?e.map(([k,v])=>`<tr><td>${esc(k)}</td><td style="text-align:right">${v}</td></tr>`).join(""):"<tr><td>No errors recorded.</td></tr>";
 }
