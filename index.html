@@ -44,7 +44,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
 </style>
 </head>
 <body>
-<header><h1>CodeCoach</h1><div class="who"><span id="who"></span> <a id="staffLink" class="hidden" href="staff.html" style="color:#fff;margin:0 6px">Tutor page</a> <button id="logout" class="hidden">Log out</button></div></header>
+<header><h1>CodeCoach</h1><div class="who"><span id="who"></span> <a id="pwLink" class="hidden" href="#" style="color:#fff;margin:0 6px">Change password</a> <a id="staffLink" class="hidden" href="staff.html" style="color:#fff;margin:0 6px">Tutor page</a> <button id="logout" class="hidden">Log out</button></div></header>
 <main>
   <!-- LOGIN -->
   <section id="vLogin" class="card hidden">
@@ -55,6 +55,17 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
     <label for="pw">Password (at least 8 characters)</label><input id="pw" type="password" autocomplete="current-password">
     <div class="row" style="margin-top:12px"><button id="authBtn">Log in</button></div>
     <div id="authMsg"></div>
+    <p class="hint" style="margin-top:12px"><b>Forgot your password?</b> Ask your tutor or the study administrator to reset it. They will give you a temporary password, and you will choose a new one when you log in.</p>
+  </section>
+
+  <!-- CHANGE PASSWORD -->
+  <section id="vPw" class="card hidden">
+    <h2 id="pwTitle">Choose a new password</h2>
+    <p class="hint" id="pwNote"></p>
+    <label for="pw1">New password (at least 8 characters)</label><input id="pw1" type="password" autocomplete="new-password">
+    <label for="pw2">Type the new password again</label><input id="pw2" type="password" autocomplete="new-password">
+    <div class="row" style="margin-top:12px"><button id="pwBtn">Save new password</button><button id="pwCancel" class="sec">Cancel</button></div>
+    <div id="pwMsg"></div>
   </section>
 
   <!-- CONSENT -->
@@ -99,7 +110,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   </section>
   <div id="globalMsg"></div>
 </main>
-<footer>CodeCoach pilot v0.2 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer>CodeCoach pilot v0.3 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 
 <script>
 // ---------- configuration (public key: safe in the app; data protected by database rules) ----------
@@ -107,7 +118,7 @@ const SUPABASE_URL="https://sdqnqbclwoqhouwuzaxv.supabase.co";
 const SUPABASE_KEY="sb_publishable_g0h4KFaS1FivbcTjIOzZfg_6URb05m8";
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=id=>document.getElementById(id);
-const show=v=>["vLogin","vConsent","vApp"].forEach(x=>$(x).classList.toggle("hidden",x!==v));
+const show=v=>["vLogin","vConsent","vApp","vPw"].forEach(x=>$(x).classList.toggle("hidden",x!==v));
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const msg=(id,text,kind="err")=>{$(id).innerHTML=text?`<div class="msg ${kind}">${esc(text)}</div>`:"";};
 let mode="in",user=null,cases=[],attempts=[],cur=null,shownAt=0,hintUsed=false,answered=false,recent=[];
@@ -131,14 +142,36 @@ db.auth.onAuthStateChange((_e,session)=>{const u=session?.user||null;if(!started
 
 async function route(){
   $("logout").classList.toggle("hidden",!user);$("who").textContent=user?user.email:"";
-  if(!user){$("staffLink").classList.add("hidden");show("vLogin");return;}
-  const {data:prof,error}=await db.from("profiles").select("id,role,study_id,consent_at").eq("id",user.id).maybeSingle();
+  if(!user){$("staffLink").classList.add("hidden");$("pwLink").classList.add("hidden");show("vLogin");return;}
+  $("pwLink").classList.remove("hidden");
+  const {data:prof,error}=await db.from("profiles").select("id,role,study_id,consent_at,must_change_password").eq("id",user.id).maybeSingle();
   if(error){msg("globalMsg","Could not load your profile: "+error.message);return;}
+  if(prof&&prof.must_change_password){openPw(true);return;}
   if(!prof||!prof.consent_at){show("vConsent");return;}
   $("who").textContent=user.email+(prof.study_id?" · "+prof.study_id:"")+(prof.role!=="student"?" · "+prof.role:"");
   $("staffLink").classList.toggle("hidden",prof.role==="student");
   show("vApp");await loadData();
 }
+
+// ---------- change password ----------
+let pwForced=false;
+function openPw(forced){pwForced=forced;$("pw1").value="";$("pw2").value="";msg("pwMsg","");
+  $("pwTitle").textContent=forced?"Choose a new password":"Change your password";
+  $("pwNote").textContent=forced?"Your password was reset by the administrator. Please choose a new password that only you know.":"";
+  $("pwCancel").classList.toggle("hidden",forced);show("vPw");}
+$("pwLink").onclick=e=>{e.preventDefault();openPw(false);};
+$("pwCancel").onclick=()=>route();
+$("pwBtn").onclick=async()=>{
+  const a=$("pw1").value,b=$("pw2").value;
+  if(a.length<8){msg("pwMsg","The password must have at least 8 characters.");return;}
+  if(a!==b){msg("pwMsg","The two passwords do not match.");return;}
+  $("pwBtn").disabled=true;
+  const {error}=await db.auth.updateUser({password:a});
+  if(error){$("pwBtn").disabled=false;msg("pwMsg","Could not change the password: "+error.message);return;}
+  await db.rpc("password_changed");
+  $("pwBtn").disabled=false;msg("pwMsg","Password changed.","info");
+  setTimeout(route,800);
+};
 
 // ---------- consent ----------
 $("consentBtn").onclick=async()=>{

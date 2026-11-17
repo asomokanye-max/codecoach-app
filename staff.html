@@ -92,13 +92,19 @@ function rUsers(){
   const admin=role==="admin";
   let h=`<div class="card"><h2>Students and roles</h2><p class="hint">${admin?"Enter each student's study ID and the trial group from the randomisation list prepared by the biostatistician, then click Save. Names are visible to admins only.":"Only administrators can change study IDs, groups and roles."}</p><table><tr><th>Email</th>${admin?"<th>Name</th>":""}<th>Consent</th><th>Study ID</th><th>Group</th><th>Role</th>${admin?"<th></th>":""}</tr>`;
   users.forEach((u,i)=>{h+=`<tr><td>${esc(u.email)}</td>${admin?`<td>${esc(u.full_name||"–")}</td>`:""}<td>${u.consent_at?"Yes":"No"}</td>`+
-    (admin?`<td><input type="text" id="sid${i}" value="${esc(u.study_id||"")}" size="9"></td><td><select id="arm${i}"><option value="">–</option><option ${u.arm==="intervention"?"selected":""}>intervention</option><option ${u.arm==="control"?"selected":""}>control</option></select></td><td><select id="role${i}">${["student","tutor","author","admin"].map(r=>`<option ${u.role===r?"selected":""}>${r}</option>`).join("")}</select></td><td><button class="sm" data-save="${i}">Save</button> <span id="st${i}" class="hint"></span></td>`
+    (admin?`<td><input type="text" id="sid${i}" value="${esc(u.study_id||"")}" size="9"></td><td><select id="arm${i}"><option value="">–</option><option ${u.arm==="intervention"?"selected":""}>intervention</option><option ${u.arm==="control"?"selected":""}>control</option></select></td><td><select id="role${i}">${["student","tutor","author","admin"].map(r=>`<option ${u.role===r?"selected":""}>${r}</option>`).join("")}</select></td><td><button class="sm" data-save="${i}">Save</button> <button class="sm sec" data-reset="${i}">Reset password</button> <div id="st${i}" class="hint"></div></td>`
     :`<td>${esc(u.study_id||"–")}</td><td>${esc(u.arm||"–")}</td><td>${esc(u.role)}</td>`)+"</tr>";});
   h+="</table></div>";$("t_users").innerHTML=h;
   document.querySelectorAll("[data-save]").forEach(b=>b.onclick=async()=>{const i=+b.dataset.save,u=users[i];b.disabled=true;
     const {error}=await db.rpc("admin_set_profile",{p_user:u.id,p_study_id:$("sid"+i).value,p_arm:$("arm"+i).value||null,p_role:$("role"+i).value});
     b.disabled=false;$("st"+i).innerHTML=error?`<span class="err">${esc(error.message)}</span>`:'<span class="ok">Saved</span>';if(!error)await loadCore();});
+  document.querySelectorAll("[data-reset]").forEach(b=>b.onclick=async()=>{const i=+b.dataset.reset,u=users[i];
+    if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Click again to confirm";$("st"+i).textContent="This will replace "+u.email+"'s password.";return;}
+    b.dataset.armed="";b.textContent="Reset password";b.disabled=true;
+    const temp=tempPassword();const {error}=await db.rpc("admin_reset_password",{p_user:u.id,p_temp:temp});b.disabled=false;
+    $("st"+i).innerHTML=error?`<span class="err">${esc(error.message)}</span>`:`<span class="ok">Temporary password: <b style="font-size:1rem;letter-spacing:1px">${temp}</b></span><br>Give this to the student privately. They must choose a new password when they next log in.`;});
 }
+function tempPassword(){const c="ABCDEFGHJKMNPQRSTUVWXYZ23456789";const r=new Uint32Array(8);crypto.getRandomValues(r);let s="CC-";for(let k=0;k<8;k++){s+=c[r[k]%c.length];if(k===3)s+="-";}return s;}
 
 // ---------- wrong codes ----------
 async function rWrong(){
