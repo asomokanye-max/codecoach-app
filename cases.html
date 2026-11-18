@@ -86,17 +86,23 @@ async function rCode(){
   [...code.map((x,i)=>[x,"c"+i]),...dec.map((x,i)=>[x,"d"+i])].forEach(([x,k])=>$("go"+k).onclick=()=>submitCode(x,k));
 }
 function item(x,k){
-  return `<div class="item"><div><b>Case ${x.case_no}</b> <span class="pill go">${esc(x.classification||"ICD-10")}</span> <span class="pill">${esc(x.chapter)}</span> <span class="pill">${esc(x.difficulty)}</span></div><p>${esc(x.case_text)}</p>`+
+  return `<div class="item"><div><b>Case ${x.case_no}</b> <span class="pill go">${esc(x.classification||"ICD-10")}</span>${x.coding_mode==="full"?' <span class="pill warn">Full coding</span>':""} <span class="pill">${esc(x.chapter)}</span> <span class="pill">${esc(x.difficulty)}</span></div><p>${esc(x.case_text)}</p>`+
   (x.task==="decide"?`<p>Author's code: <b>${esc(x.author_codes)}</b> · Coder 1: <b>${esc(x.coder1_code)}</b> · Coder 2: <b>${esc(x.coder2_code)}</b></p>`:"")+
-  `<div class="row"><div><label>${x.task==="decide"?"Final code":"Your code"}</label><input type="text" id="cd${k}" placeholder="${FMT[x.classification||"ICD-10"]}" autocomplete="off"></div><div><label>Relevance</label>${sel("rl"+k,REL,"")}</div><div><label>Clarity</label>${sel("cl"+k,CLA,"")}</div></div>`+
+  (x.coding_mode==="full"?
+    (x.task==="decide"?`<p class="hint">Full-coding case. If the author's key is right, confirm it. If it is wrong or incomplete, return the case to the author with a comment saying what to change.</p><div class="row"><div><label>Decision</label><select id="cd${k}"><option value="key">Confirm author's key</option><option value="return">Return to author for correction</option></select></div><div><label>Relevance</label>${sel("rl"+k,REL,"")}</div><div><label>Clarity</label>${sel("cl"+k,CLA,"")}</div></div>`
+     :`<label>Your coding: one code per line, principal diagnosis first, then complications and associated conditions${x.classification==="ICD-10"?" (dagger–asterisk pair on one line, e.g. A17.0† G01*)":" (cluster with / if needed)"}</label><textarea id="cd${k}" style="min-height:90px;text-transform:uppercase"></textarea><div class="row"><div><label>Relevance</label>${sel("rl"+k,REL,"")}</div><div><label>Clarity</label>${sel("cl"+k,CLA,"")}</div></div>`)
+  :`<div class="row"><div><label>${x.task==="decide"?"Final code":"Your code"}</label><input type="text" id="cd${k}" placeholder="${FMT[x.classification||"ICD-10"]}" autocomplete="off"></div><div><label>Relevance</label>${sel("rl"+k,REL,"")}</div><div><label>Clarity</label>${sel("cl"+k,CLA,"")}</div></div>`)+
   `<label>Comment (optional: what is unclear or should change)</label><textarea id="cm${k}"></textarea><p><button id="go${k}">${x.task==="decide"?"Save decision":"Submit code"}</button> <span id="st${k}"></span></p></div>`;
 }
 async function submitCode(x,k){
   const b=$("go"+k);b.disabled=true;$("st"+k).textContent="Saving…";
-  const args={p_case:x.case_id,p_code:$("cd"+k).value,p_relevance:+$("rl"+k).value||null,p_clarity:+$("cl"+k).value||null,p_comment:$("cm"+k).value};
-  const {data,error}=await db.rpc(x.task==="decide"?"adjudicate_case":"submit_coding",args);
+  const base={p_case:x.case_id,p_relevance:+$("rl"+k).value||null,p_clarity:+$("cl"+k).value||null,p_comment:$("cm"+k).value};
+  const full=x.coding_mode==="full";
+  const fn=full?(x.task==="decide"?"adjudicate_full":"submit_coding_full"):(x.task==="decide"?"adjudicate_case":"submit_coding");
+  const args=full?(x.task==="decide"?{...base,p_decision:$("cd"+k).value}:{...base,p_rows:$("cd"+k).value.split(/\n/).map(r=>r.trim()).filter(Boolean)}):{...base,p_code:$("cd"+k).value};
+  const {data,error}=await db.rpc(fn,args);
   if(error){b.disabled=false;$("st"+k).innerHTML=errMsg(error);return;}
-  const msg={saved:"Saved. Waiting for the second coder.",agreed:"Saved. Both coders agree with the answer key; the case is ready for approval.","needs third coder":"Saved. The coders disagree, so a third coder will decide.",decided:"Decision saved; the case is ready for approval.","decided - answer key changed":"Decision saved. The answer key now uses your code; the case is ready for approval."}[data]||data;
+  const msg={saved:"Saved. Waiting for the second coder.",agreed:"Saved. Both coders agree with the answer key; the case is ready for approval.","needs third coder":"Saved. The coders disagree, so a third coder will decide.",decided:"Decision saved; the case is ready for approval.","decided - answer key changed":"Decision saved. The answer key now uses your code; the case is ready for approval.","returned to author":"The case has been returned to the author with your comment."}[data]||data;
   $("st"+k).innerHTML=`<span class="ok">${esc(msg)}</span>`;setTimeout(rCode,2500);
 }
 
@@ -109,12 +115,17 @@ function rWrite(){
   <label>Case text</label><textarea id="wText" style="min-height:110px">${esc(c.case_text)}</textarea>
   <div class="row"><div><label>Chapter</label><select id="wChap"></select></div>
   <div><label>Difficulty</label><select id="wDiff"><option value="">Choose…</option>${["Easy","Medium","Hard"].map(x=>`<option ${x===c.difficulty?"selected":""}>${x}</option>`).join("")}</select></div></div>
-  <label>Accepted code(s)</label><input type="text" id="wCodes" style="width:100%" value="${esc(c.codes)}" placeholder="e.g. B50.9   (if more than one code is acceptable, separate with commas; the first is the main code)">
+  <label>Coding task</label><select id="wMode"><option value="principal" ${c.coding_mode!=="full"?"selected":""}>Principal diagnosis only (one code)</option><option value="full" ${c.coding_mode==="full"?"selected":""}>Full coding (principal + complications / associated conditions)</option></select>
+  <div id="keyBox" class="hidden"><label>Answer key (first line is the principal diagnosis)</label><p class="hint" id="keyHint"></p><table id="keyTable"></table><p><button class="sm sec" type="button" id="addKey">+ Add key line</button></p></div>
+  <div id="codesBox"><label>Accepted code(s)</label><input type="text" id="wCodes" style="width:100%" value="${esc(c.codes)}" placeholder="e.g. B50.9   (if more than one code is acceptable, separate with commas; the first is the main code)"></div>
   <label>Hint: index path (lead term)</label><input type="text" id="wLead" style="width:100%" value="${esc(c.lead_term)}" placeholder="e.g. Malaria → falciparum">
   <label>Explanation shown after the student answers</label><textarea id="wExpl">${esc(c.explanation)}</textarea>
   <p><button id="wSave" class="sec">Save draft</button> <button id="wSend">Send for coding</button> ${editing?'<button id="wNew" class="sec">Start a new case instead</button>':""} <span id="wSt"></span></p></div>`;
   const fillCh=()=>{const cl=$("wCls").value,list=cl==="ICD-11"?CH11:CHAPTERS,cur=$("wChap").value||c.chapter;$("wChap").innerHTML='<option value="">Choose…</option>'+list.map(x=>`<option ${x===cur?"selected":""}>${esc(x)}</option>`).join("");$("wCodes").placeholder=(cl==="ICD-11"?"e.g. 1A00.0&X... ":"e.g. B50.9 ")+" (if more than one answer is acceptable, separate with commas; the first is the main answer)";};
-  $("wCls").onchange=fillCh;fillCh();
+  keyLines=(c.keyLines&&c.keyLines.length)?c.keyLines.map(x=>({...x})):[{role:"principal",codes:"",asterisk:"",required:true}];
+  const showMode=()=>{const full=$("wMode").value==="full";$("keyBox").classList.toggle("hidden",!full);$("codesBox").classList.toggle("hidden",full);if($("kr0"))readKey();drawKey();};
+  $("wCls").onchange=()=>{fillCh();if($("kr0"))readKey();drawKey();};fillCh();$("wMode").onchange=showMode;showMode();
+  $("addKey").onclick=()=>{readKey();keyLines.push({role:"associated",codes:"",asterisk:"",required:true});drawKey();};
   $("wSave").onclick=()=>saveCase(false);$("wSend").onclick=()=>saveCase(true);
   if(editing)$("wNew").onclick=()=>{editing=null;rWrite();};
 }
@@ -122,13 +133,28 @@ async function saveCase(submit){
   const b=submit?$("wSend"):$("wSave");
   if(submit&&b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Click again to send";$("wSt").textContent="After sending you cannot edit it.";return;}
   b.dataset.armed="";b.textContent=submit?"Send for coding":"Save draft";b.disabled=true;$("wSt").textContent="Saving…";
-  const {data,error}=await db.rpc("author_save_case",{p_id:editing?.case_id||null,p_text:$("wText").value,p_chapter:$("wChap").value,p_difficulty:$("wDiff").value,
-    p_lead:$("wLead").value,p_expl:$("wExpl").value,p_codes:$("wCodes").value.split(/[,;]/),p_submit:submit,p_class:$("wCls").value});
+  const full=$("wMode").value==="full";if(full)readKey();
+  const args={p_id:editing?.case_id||null,p_text:$("wText").value,p_chapter:$("wChap").value,p_difficulty:$("wDiff").value,
+    p_lead:$("wLead").value,p_expl:$("wExpl").value,p_codes:full?[]:$("wCodes").value.split(/[,;]/),p_submit:false,p_class:$("wCls").value};
+  const fail=e=>{b.disabled=false;$("wSt").innerHTML=errMsg(e);};
+  if(editing?.case_id&&(editing.coding_mode||"principal")!==$("wMode").value){const r=await db.rpc("author_set_mode",{p_case:editing.case_id,p_mode:$("wMode").value});if(r.error)return fail(r.error);}
+  let r=await db.rpc("author_save_case",args);if(r.error)return fail(r.error);const id=r.data;
+  if(full){r=await db.rpc("author_save_full_key",{p_case:id,p_lines:keyLines.map(l=>({role:l.role,codes:l.codes,asterisk:l.asterisk,required:l.required}))});if(r.error){editing={...(editing||{}),case_id:id,coding_mode:"principal"};return fail(r.error);}}
+  if(submit){r=await db.rpc("author_save_case",{...args,p_id:id,p_submit:true});if(r.error){editing={...(editing||{}),case_id:id,coding_mode:full?"full":"principal"};return fail(r.error);}}
   b.disabled=false;
-  if(error){$("wSt").innerHTML=errMsg(error);return;}
   if(submit){editing=null;rWrite();$("wSt").innerHTML='<span class="ok">Sent for coding. Two other staff will now code it blind. Follow it under "'+(role==="admin"?"All cases":"My cases")+'".</span>';}
-  else{editing={case_id:data,classification:$("wCls").value,case_text:$("wText").value,chapter:$("wChap").value,difficulty:$("wDiff").value,codes:$("wCodes").value,lead_term:$("wLead").value,explanation:$("wExpl").value,case_no:editing?.case_no||"(draft)"};$("wSt").innerHTML='<span class="ok">Draft saved.</span>';}
+  else{editing={case_id:id,classification:$("wCls").value,coding_mode:full?"full":"principal",keyLines:full?keyLines:null,case_text:$("wText").value,chapter:$("wChap").value,difficulty:$("wDiff").value,codes:$("wCodes").value,lead_term:$("wLead").value,explanation:$("wExpl").value,case_no:editing?.case_no||"(draft)"};$("wSt").innerHTML='<span class="ok">Draft saved.</span>';}
 }
+
+// ---------- full-coding key editor ----------
+let keyLines=[];
+function drawKey(){
+  if(!$("keyTable"))return;const c10=$("wCls").value==="ICD-10";
+  $("keyHint").textContent=c10?"One line per condition. For a dagger–asterisk pair, put the dagger code in Codes and the asterisk code in Asterisk. Alternatives that are equally correct can be separated by commas.":"One line per condition (ICD-11 has no dagger–asterisk system; students may cluster codes with /). Alternatives that are equally correct can be separated by commas.";
+  $("keyTable").innerHTML=`<tr><th>Role</th><th>Code(s)</th>${c10?"<th>Asterisk</th>":""}<th>Required</th><th></th></tr>`+keyLines.map((l,i)=>`<tr><td><select id="kr${i}">${[["principal","Principal diagnosis"],["complication","Complication"],["associated","Associated condition"]].map(([v,t])=>`<option value="${v}" ${l.role===v?"selected":""}>${t}</option>`).join("")}</select></td><td><input type="text" id="kc${i}" value="${esc(l.codes)}" size="14" placeholder="${c10?"e.g. A17.0":"e.g. 1B11.0"}"></td>${c10?`<td><input type="text" id="ka${i}" value="${esc(l.asterisk||"")}" size="8" placeholder="e.g. G01"></td>`:""}<td><input type="checkbox" id="kq${i}" ${l.required!==false?"checked":""}></td><td>${keyLines.length>1?`<button class="sm sec" type="button" data-kdel="${i}">Remove</button>`:""}</td></tr>`).join("");
+  document.querySelectorAll("[data-kdel]").forEach(b=>b.onclick=()=>{readKey();keyLines.splice(+b.dataset.kdel,1);drawKey();});
+}
+function readKey(){keyLines=keyLines.map((l,i)=>({role:$("kr"+i)?.value||l.role,codes:$("kc"+i)?.value||"",asterisk:$("ka"+i)?$("ka"+i).value:"",required:$("kq"+i)?$("kq"+i).checked:true}));return keyLines;}
 
 // ---------- list ----------
 async function rList(){
@@ -151,7 +177,7 @@ async function rList(){
     if(admin&&x.status==="approved")a+=`<button class="sm sec" data-act="retire" data-i="${i}">Retire</button> `;
     if(x.status==="approved")a+=`<button class="sm sec" data-act="copy" data-i="${i}">Make ${x.classification==="ICD-11"?"ICD-10":"ICD-11"} version</button> `;
     if(admin&&x.status==="retired")a+=`<button class="sm sec" data-act="restore" data-i="${i}">Restore</button> `;
-    return `<div class="item"><div><b>Case ${x.case_no}</b> <span class="pill go">${esc(x.classification||"ICD-10")}</span> <span class="pill ${cls}">${esc(x.stage)}</span> <span class="pill">${esc(x.chapter)}</span> <span class="pill">${esc(x.difficulty)}</span>${admin&&x.author?` <span class="hint">by ${esc(x.author)}</span>`:""}</div>
+    return `<div class="item"><div><b>Case ${x.case_no}</b> <span class="pill go">${esc(x.classification||"ICD-10")}</span>${x.coding_mode==="full"?' <span class="pill warn">Full coding</span>':""} <span class="pill ${cls}">${esc(x.stage)}</span> <span class="pill">${esc(x.chapter)}</span> <span class="pill">${esc(x.difficulty)}</span>${admin&&x.author?` <span class="hint">by ${esc(x.author)}</span>`:""}</div>
     <p>${esc(x.case_text)}</p><p class="hint">Accepted: <b>${esc(x.codes||"–")}</b> · Hint: ${esc(x.lead_term||"–")}<br>Explanation: ${esc(x.explanation||"–")}</p>`+
     (x.coder1_code||x.coder2_code?`<p class="hint">Coder 1: <b>${esc(x.coder1_code||"–")}</b> · Coder 2: <b>${esc(x.coder2_code||"–")}</b>${x.adjudicated_code?` · Third coder: <b>${esc(x.adjudicated_code)}</b>`:""}</p>`:"")+
     (x.cvi_relevance!=null?`<p class="hint ${low?"err":""}">CVI relevance ${x.cvi_relevance} · clarity ${x.cvi_clarity}${x.comments?` · Comments: ${esc(x.comments)}`:""}</p>`:"")+
@@ -162,7 +188,9 @@ async function rList(){
 }
 async function caseAction(b,x){
   const act=b.dataset.act,i=b.dataset.i;
-  if(act==="edit"){editing={...x};tab("write");return;}
+  if(act==="edit"){editing={...x};
+    if(x.coding_mode==="full"){const {data}=await db.rpc("author_key_lines",{p_case:x.case_id});editing.keyLines=(data||[]).map(l=>({role:l.role,codes:l.codes,asterisk:l.asterisk||"",required:l.required}));}
+    tab("write");return;}
   if(act==="copy"){b.disabled=true;const to=x.classification==="ICD-11"?"ICD-10":"ICD-11";const {data,error}=await db.rpc("copy_case_as",{p_case:x.case_id,p_class:to});
     if(error){b.disabled=false;$("ls"+i).innerHTML=errMsg(error);return;}
     editing={case_id:data,case_no:"(new "+to+" draft)",classification:to,case_text:x.case_text,chapter:"",difficulty:x.difficulty,codes:"",lead_term:"",explanation:""};tab("write");
@@ -175,6 +203,6 @@ async function caseAction(b,x){
 }
 start();
 </script>
-<footer style="text-align:center;font-size:.75rem;color:#5b6575;padding:12px">CodeCoach case workshop v0.5.1 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer style="text-align:center;font-size:.75rem;color:#5b6575;padding:12px">CodeCoach case workshop v0.6 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 </body>
 </html>

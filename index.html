@@ -43,7 +43,8 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{text-align:left;
 .consent{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:.88rem;background:#fafbfc}
 .hidden{display:none}
 .banner{background:#fff4d6;border:1px solid #f0d58a;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-.titem{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff}.titem input{text-transform:uppercase}
+.frow{display:flex;gap:8px;align-items:center;margin-bottom:6px}.frow label{min-width:150px;font-size:.85rem;margin:0}.frow input{flex:1;text-transform:uppercase}
+.titem{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff}.titem input{text-transform:uppercase}.titem .frow label{min-width:140px}
 .timer{position:sticky;top:0;z-index:5;background:var(--blue);color:#fff;border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-weight:600}
 .timer.low{background:#b3261e}
 footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24px}
@@ -107,7 +108,9 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
       <div class="top"><span id="counter"></span><span><span class="tag cls" id="clsTag"></span> <span class="tag" id="chapter"></span> <span class="tag" id="level"></span></span></div>
       <div class="case" id="caseText">Loading cases…</div>
       <label for="code" id="codeLabel">Assign the ICD-10 code for the principal diagnosis</label>
-      <div class="row"><input id="code" type="text" placeholder="Type your code" autocomplete="off" maxlength="60"><button id="check">Check</button></div>
+      <div class="row" id="singleBox"><input id="code" type="text" placeholder="Type your code" autocomplete="off" maxlength="60"><button id="check">Check</button></div>
+      <div id="fullBox" class="hidden"><div id="fullRows"></div>
+        <div class="row" style="margin-top:6px"><button class="sec" type="button" id="addRow">+ Add another code</button><span id="symBtns"><button class="sec" type="button" id="insDag" title="Insert dagger">Insert †</button> <button class="sec" type="button" id="insAst" title="Insert asterisk">Insert *</button></span><button id="checkFull">Check</button></div></div>
       <div class="lookup"><b>Look it up, don't guess.</b> <span id="lookupText"></span>
         <div class="row" style="margin-top:8px"><button class="sec" id="hintBtn" type="button">Stuck? Show a hint</button></div><div id="hintText" class="hint"></div></div>
       <div class="hint" id="fmtHint"></div>
@@ -125,7 +128,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   </section>
   <div id="globalMsg"></div>
 </main>
-<footer>CodeCoach pilot v0.5.1 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer>CodeCoach pilot v0.6.1 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 
 <script>
 // ---------- configuration (public key: safe in the app; data protected by database rules) ----------
@@ -204,7 +207,7 @@ $("consentBtn").onclick=async()=>{
 
 // ---------- data ----------
 async function loadData(){
-  const a=await db.from("cases").select("id,case_no,case_text,chapter,difficulty,classification").eq("status","approved").order("case_no");
+  const a=await db.from("cases").select("id,case_no,case_text,chapter,difficulty,classification,coding_mode").eq("status","approved").order("case_no");
   if(a.error){$("caseText").textContent="Could not load cases: "+a.error.message;return;}
   allCases=a.data;try{clsChoice=localStorage.getItem("cc_cls")||"Both";}catch(e){}applyCls();
   const b=await db.from("attempts").select("case_id,is_correct,error_type,hint_used,created_at").eq("user_id",user.id).order("created_at");
@@ -252,6 +255,7 @@ function nextCase(){
   $("chapter").textContent="Chapter "+cur.chapter;$("level").textContent=cur.difficulty;
   $("caseText").textContent=cur.case_text;
   $("code").value="";$("code").disabled=false;$("check").disabled=false;$("next").disabled=true;
+  setupMode();
   $("feedback").innerHTML="";$("hintText").textContent="";$("hintBtn").disabled=false;
   shownAt=Date.now();$("code").focus();
 }
@@ -280,6 +284,43 @@ async function check(){
 $("check").onclick=check;$("next").onclick=nextCase;
 $("code").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();answered?nextCase():check();}});
 
+// ---------- full coding (principal + additional codes) ----------
+let lastInput=null;
+function isFull(){return cur&&cur.coding_mode==="full";}
+function addRow(){const n=$("fullRows").children.length;const d=document.createElement("div");d.className="frow";
+  d.innerHTML=`<label>${n===0?"Principal diagnosis":"Additional code "+n}</label><input type="text" maxlength="60" autocomplete="off">`;
+  $("fullRows").appendChild(d);const inp=d.querySelector("input");inp.addEventListener("focus",()=>lastInput=inp);
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();answered?nextCase():checkFull();}});return inp;}
+function setupMode(){
+  const full=isFull(),c10=(cur.classification||"ICD-10")==="ICD-10";
+  $("singleBox").classList.toggle("hidden",full);$("fullBox").classList.toggle("hidden",!full);
+  if(!full)return;
+  $("fullRows").innerHTML="";addRow();addRow();addRow();lastInput=null;
+  $("symBtns").classList.toggle("hidden",!c10);$("checkFull").disabled=false;$("addRow").disabled=false;
+  $("codeLabel").textContent="Full coding: principal diagnosis first, then complications and associated conditions (one code per box). Leave unused boxes empty.";
+  $("fmtHint").textContent=c10?"Dagger–asterisk pair: type both codes in one box, e.g. A17.0† G01* (you may type + instead of †). The asterisk code ends with *.":"ICD-11: give each condition in its own box, or cluster related codes with / (e.g. stem/stem); add extension codes with &.";
+  $("chapter").textContent+=" · Full coding";
+}
+$("addRow").onclick=()=>{if($("fullRows").children.length<8)addRow().focus();};
+function insertSym(sym){const i=lastInput||$("fullRows").querySelector("input");if(!i)return;const p=i.selectionStart??i.value.length;i.value=i.value.slice(0,p)+sym+i.value.slice(p);i.focus();}
+$("insDag").onclick=()=>insertSym("† ");$("insAst").onclick=()=>insertSym("*");
+async function checkFull(){
+  if(answered||!cur)return;
+  const rows=[...$("fullRows").querySelectorAll("input")].map(i=>i.value.trim());
+  if(!rows[0]){$("feedback").innerHTML='<div class="fb part"><b>Enter the principal diagnosis first.</b>It goes in the first box.</div>';return;}
+  $("checkFull").disabled=true;
+  const {data,error}=await db.rpc("check_answer_full",{p_case:cur.id,p_rows:rows,p_hint:hintUsed,p_seconds:Math.round((Date.now()-shownAt)/1000)});
+  if(error){$("checkFull").disabled=false;$("feedback").innerHTML=`<div class="fb bad"><b>Could not check your answer.</b>${esc(error.message)}. Check your internet connection and try again.</div>`;return;}
+  if(!data.valid_format){$("checkFull").disabled=false;$("feedback").innerHTML=`<div class="fb part"><b>Box ${data.bad_row||1} does not look like a valid ${esc(data.classification)} code.</b>${data.classification==="ICD-11"?"Check the stem code format (e.g. 1A00.0).":"Use one code per box, or a dagger–asterisk pair such as A17.0† G01*."}</div>`;return;}
+  answered=true;$("fullRows").querySelectorAll("input").forEach(i=>i.disabled=true);$("addRow").disabled=true;$("next").disabled=false;$("next").focus();
+  const errs=data.errors||[];
+  attempts.push({case_id:cur.id,is_correct:data.correct,error_type:errs[0]||null,hint_used:hintUsed,created_at:new Date().toISOString()});
+  const why=`<div class="why"><b style="display:inline">Correct coding:</b> ${esc(data.key)}<br><br>${data.note?esc(data.note)+"<br><br>":""}${esc(data.explanation||"")}</div>`;
+  if(data.correct)$("feedback").innerHTML=`<div class="fb ok"><b>Correct: ${data.score} of ${data.max} points</b>${why}</div>`;
+  else $("feedback").innerHTML=`<div class="fb ${data.score>0?"part":"bad"}"><b>${data.score>0?"Partly correct":"Not correct"}: ${data.score} of ${data.max} points</b>${errs.map(e=>"• "+esc(e)).join("<br>")}${why}</div>`;
+}
+$("checkFull").onclick=checkFull;
+
 // ---------- baseline / endline tests ----------
 const OCC={baseline:"Baseline test",endline:"Endline test"};
 let test=null,tick=null,saveTimers={};
@@ -289,7 +330,7 @@ async function checkTests(){
   const t=data.find(x=>x.state==="in progress")||data.find(x=>x.is_open&&x.state==="not started");
   if(!t)return;
   const going=t.state==="in progress";
-  $("testBanner").innerHTML=`<div class="banner"><div><b>${OCC[t.occasion]} ${going?"in progress":"is open"}.</b><br><span class="hint">${going?"Your time is still running. Return to the test now.":`20 coding items (10 ICD-10, 10 ICD-11), ${t.minutes} minutes, no feedback. Once you start, the timer cannot be paused.`}</span></div><button id="startTest">${going?"Return to test":"Start test"}</button></div>`;
+  $("testBanner").innerHTML=`<div class="banner"><div><b>${OCC[t.occasion]} ${going?"in progress":"is open"}.</b><br><span class="hint">${going?"Your time is still running. Return to the test now.":`20 coding items (10 ICD-10, 10 ICD-11; 4 ask for full coding), ${t.minutes} minutes, no feedback. Once you start, the timer cannot be paused.`}</span></div><button id="startTest">${going?"Return to test":"Start test"}</button></div>`;
   $("startTest").onclick=async()=>{const b=$("startTest");
     if(!going&&b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Click again to start the timer";return;}
     b.disabled=true;await openTest(t.occasion);};
@@ -302,16 +343,20 @@ async function openTest(occ){
   let h="",part="";
   data.items.forEach((it,i)=>{
     if(it.classification!==part){part=it.classification;h+=`<h2 style="margin:14px 0 8px">${part==="ICD-10"?"Part A: ICD-10":"Part B: ICD-11"}</h2><p class="hint">${part==="ICD-10"?"Format: A00.0 (dot optional).":"Format: stem code such as 1A00.0; add extension codes with &amp; and further stem codes with / if the record supports them."}</p>`;}
-    h+=`<div class="titem"><div class="top"><b>Item ${it.item_no}</b><span class="tag cls">${esc(it.classification)}</span></div><div class="case">${esc(it.case_text)}</div><div class="row"><input type="text" id="ta${i}" maxlength="60" autocomplete="off" placeholder="${it.classification==="ICD-11"?"ICD-11 code":"ICD-10 code"}" value="${esc(it.answer||"")}"><span id="ts${i}" class="hint">${it.answer?"Saved":""}</span></div></div>`;});
+    if(it.coding_mode==="full"){const parts=(it.answer||"").split(" | ");while(parts.length<3)parts.push("");
+      h+=`<div class="titem"><div class="top"><b>Item ${it.item_no}</b><span><span class="tag cls">${esc(it.classification)}</span> <span class="tag">Full coding</span></span></div><div class="case">${esc(it.case_text)}</div><p class="hint">Principal diagnosis first, then complications and associated conditions, one per box${it.classification==="ICD-10"?"; a dagger–asterisk pair goes in one box, e.g. A17.0† G01* (+ may be typed for †)":"; related codes may be clustered with /"}.</p><div id="fr${i}">${parts.map((p,j)=>`<div class="frow"><label>${j===0?"Principal diagnosis":"Additional code "+j}</label><input type="text" maxlength="60" autocomplete="off" value="${esc(p)}"></div>`).join("")}</div><div class="row"><button class="sec sm" type="button" data-addr="${i}">+ Add another code</button><span id="ts${i}" class="hint">${it.answer?"Saved":""}</span></div></div>`;}
+    else h+=`<div class="titem"><div class="top"><b>Item ${it.item_no}</b><span class="tag cls">${esc(it.classification)}</span></div><div class="case">${esc(it.case_text)}</div><div class="row"><input type="text" id="ta${i}" maxlength="60" autocomplete="off" placeholder="${it.classification==="ICD-11"?"ICD-11 code":"ICD-10 code"}" value="${esc(it.answer||"")}"><span id="ts${i}" class="hint">${it.answer?"Saved":""}</span></div></div>`;});
   $("testItems").innerHTML=h;
-  data.items.forEach((it,i)=>{const inp=$("ta"+i);
-    inp.addEventListener("input",()=>{$("ts"+i).textContent="…";clearTimeout(saveTimers[i]);saveTimers[i]=setTimeout(()=>saveAnswer(it,i),800);});
-    inp.addEventListener("blur",()=>{clearTimeout(saveTimers[i]);saveAnswer(it,i);});});
+  const wire=(inp,it,i)=>{inp.addEventListener("input",()=>{$("ts"+i).textContent="…";clearTimeout(saveTimers[i]);saveTimers[i]=setTimeout(()=>saveAnswer(it,i),800);});
+    inp.addEventListener("blur",()=>{clearTimeout(saveTimers[i]);saveAnswer(it,i);});};
+  data.items.forEach((it,i)=>{if(it.coding_mode==="full")$("fr"+i).querySelectorAll("input").forEach(inp=>wire(inp,it,i));else wire($("ta"+i),it,i);});
+  document.querySelectorAll("[data-addr]").forEach(b=>b.onclick=()=>{const i=+b.dataset.addr,box=$("fr"+i);if(box.children.length>=8)return;const d=document.createElement("div");d.className="frow";d.innerHTML=`<label>Additional code ${box.children.length}</label><input type="text" maxlength="60" autocomplete="off">`;box.appendChild(d);wire(d.querySelector("input"),test.items[i],i);d.querySelector("input").focus();});
   $("submitTest").disabled=false;$("submitTest").dataset.armed="";$("submitTest").textContent="Submit test";$("submitMsg").textContent="";
   show("vTest");window.scrollTo(0,0);clearInterval(tick);tick=setInterval(updateTimer,1000);updateTimer();
 }
+function testAnswer(it,i){if(it.coding_mode==="full")return [...$("fr"+i).querySelectorAll("input")].map(x=>x.value.trim().replace(/\|/g,"")).filter(Boolean).join(" | ");return $("ta"+i).value.trim();}
 async function saveAnswer(it,i){
-  if(!test)return;const v=$("ta"+i).value.trim();if(v===(it.answer||"")&&$("ts"+i).textContent==="Saved")return;
+  if(!test)return;const v=testAnswer(it,i);if(v===(it.answer||"")&&$("ts"+i).textContent==="Saved")return;
   const {error}=await db.rpc("save_test_answer",{p_occasion:test.occasion,p_item:it.id,p_answer:v});
   if(error){$("ts"+i).innerHTML=`<span style="color:var(--bad)">Not saved: ${esc(error.message)}</span>`;return;}
   it.answer=v;$("ts"+i).textContent="Saved";
@@ -332,7 +377,7 @@ async function finishTest(auto){
   $("testBanner").innerHTML=`<div class="msg info"><b>${OCC[occ]} submitted${auto?" (time up)":""}.</b> ${data?data.answered+" of 20 items answered. ":""}Thank you. Your answers have been recorded; marks are not shown during the study.</div>`;
 }
 $("submitTest").onclick=()=>{const b=$("submitTest");
-  if(b.dataset.armed!=="1"){b.dataset.armed="1";const n=test?test.items.filter((it,i)=>$("ta"+i).value.trim()).length:0;b.textContent="Click again to submit";$("submitMsg").textContent=`You have answered ${n} of 20. You cannot change your answers after submitting.`;return;}
+  if(b.dataset.armed!=="1"){b.dataset.armed="1";const n=test?test.items.filter((it,i)=>testAnswer(it,i)).length:0;b.textContent="Click again to submit";$("submitMsg").textContent=`You have answered ${n} of 20. You cannot change your answers after submitting.`;return;}
   finishTest(false);};
 
 // ---------- weak areas ----------
