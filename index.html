@@ -103,7 +103,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   <section id="vApp" class="hidden">
     <div id="testBanner"></div>
     <div class="tabs"><button id="tPractice">Practise</button><button id="tWeak" class="sec">My weak areas</button></div>
-    <div class="clsbar">Practise: <button class="sm" data-cls="Both">ICD-10 and ICD-11</button><button class="sm sec" data-cls="ICD-10">ICD-10 only</button><button class="sm sec" data-cls="ICD-11">ICD-11 only</button></div>
+    <div class="clsbar">Practise: <button class="sm" data-cls="Both">ICD-10 and ICD-11</button><button class="sm sec" data-cls="ICD-10">ICD-10 only</button><button class="sm sec" data-cls="ICD-11">ICD-11 only</button><label style="display:inline-flex;align-items:center;gap:4px;margin:0 0 0 8px;font-weight:600"><input type="checkbox" id="fullOnly" style="width:auto"> Full coding only</label></div>
     <div id="pPractice" class="card">
       <div class="top"><span id="counter"></span><span><span class="tag cls" id="clsTag"></span> <span class="tag" id="chapter"></span> <span class="tag" id="level"></span></span></div>
       <div class="case" id="caseText">Loading cases…</div>
@@ -128,7 +128,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   </section>
   <div id="globalMsg"></div>
 </main>
-<footer>CodeCoach pilot v0.6.1 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer>CodeCoach pilot v0.6.2 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 
 <script>
 // ---------- configuration (public key: safe in the app; data protected by database rules) ----------
@@ -224,9 +224,10 @@ const GUIDE={"ICD-10":{label:"Assign the ICD-10 code for the principal diagnosis
   fmt:"Format: a stem code such as 1A00.0. Add an extension code with & (stem&X...). Join a second stem code with / (stem/stem). Spaces and order of extension codes do not matter.",
   bad:"That does not look like an ICD-11 code. A stem code has four characters (e.g. 1A00), optionally a dot and one or two more (1A00.0). Extension codes start with X and are joined with &; extra stem codes are joined with /."}};
 function applyCls(){
-  cases=clsChoice==="Both"?allCases:allCases.filter(c=>(c.classification||"ICD-10")===clsChoice);
+  cases=(clsChoice==="Both"?allCases:allCases.filter(c=>(c.classification||"ICD-10")===clsChoice)).filter(c=>!$("fullOnly").checked||c.coding_mode==="full");
   document.querySelectorAll("[data-cls]").forEach(b=>b.className="sm"+(b.dataset.cls===clsChoice?"":" sec"));
 }
+$("fullOnly").onchange=()=>{applyCls();recent=[];nextCase();if(!$("pWeak").classList.contains("hidden"))renderWeak();};
 document.querySelectorAll("[data-cls]").forEach(b=>b.onclick=()=>{clsChoice=b.dataset.cls;try{localStorage.setItem("cc_cls",clsChoice);}catch(e){}applyCls();recent=[];nextCase();if(!$("pWeak").classList.contains("hidden"))renderWeak();});
 
 // ---------- adaptive case selection ----------
