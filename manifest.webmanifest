@@ -1,0 +1,14 @@
+{
+  "name": "CodeCoach: ICD-10 and ICD-11 coding practice",
+  "short_name": "CodeCoach",
+  "description": "Clinical coding practice for Health Information Management students (synthetic cases only).",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#1F4E79",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

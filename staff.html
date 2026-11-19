@@ -119,6 +119,7 @@ async function rWrong(){
     b.disabled=true;const draft=$("wn"+i).dataset.draft?+$("wn"+i).dataset.draft:null;
     const {error}=await db.rpc("save_wrong_note",{p_case:r.case_id,p_wrong:r.wrong_code,p_note:note,p_draft:draft});
     $("ws"+i).innerHTML=error?`<span class="err">${esc(error.message)}</span>`:`<span class="ok">Saved${draft?" (AI-assisted, checked by you)":""}. Students will now see this note.</span>`;if(error)b.disabled=false;});
+  document.querySelectorAll("[id^=wn]").forEach(ta=>ta.addEventListener("input",()=>{const sb=document.querySelector(`[data-wn="${ta.id.slice(2)}"]`);if(sb)sb.disabled=false;}));
   document.querySelectorAll("[data-ai]").forEach(b=>b.onclick=async()=>{const i=+b.dataset.ai,r=data[i];
     b.disabled=true;$("ws"+i).textContent="Asking the AI for a draft…";
     const {data:res,error}=await db.functions.invoke("codecoach-explain",{body:{case_id:r.case_id,wrong_code:r.wrong_code}});
@@ -127,6 +128,7 @@ async function rWrong(){
     if(error&&error.context&&typeof error.context.json==="function"){try{const j=await error.context.json();if(j&&j.error)msg=j.error;}catch(e){}}
     if(msg){$("ws"+i).innerHTML=`<span class="err">AI draft not available: ${esc(msg)}</span>`;return;}
     $("wn"+i).value=res.draft;$("wn"+i).dataset.draft=res.draft_id;
+    {const sb=document.querySelector(`[data-wn="${i}"]`);if(sb)sb.disabled=false;}
     $("ws"+i).innerHTML='<span class="hint"><b>AI draft.</b> Check every code and statement, edit as needed, then click Save note.</span>';});
 }
 

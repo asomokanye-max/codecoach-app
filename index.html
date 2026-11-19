@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CodeCoach</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1F4E79">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CodeCoach">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--blue:#1F4E79;--blue2:#2E75B6;--bg:#f5f7fa;--card:#fff;--ink:#1d2430;--mut:#5b6575;--ok:#1e7a46;--okbg:#e6f4ec;--bad:#b3261e;--badbg:#fbe9e7;--warn:#8a5a00;--warnbg:#fff4dc;--line:#dde3ea}
@@ -51,6 +57,7 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
 </style>
 </head>
 <body>
+<div id="offBar" class="hidden" style="background:#fff4dc;color:#8a5a00;font-size:.85rem;padding:8px 14px;text-align:center">You are offline. What is on screen stays visible; checking answers, loading new cases and tests need a connection. Your work continues when you are back online.</div>
 <header><h1>CodeCoach</h1><div class="who"><span id="who"></span> <a id="pwLink" class="hidden" href="#" style="color:#fff;margin:0 6px">Change password</a> <a id="staffLink" class="hidden" href="staff.html" style="color:#fff;margin:0 6px">Tutor page</a> <button id="logout" class="hidden">Log out</button></div></header>
 <main>
   <!-- LOGIN -->
@@ -128,13 +135,18 @@ footer{text-align:center;font-size:.75rem;color:var(--mut);padding:10px 16px 24p
   </section>
   <div id="globalMsg"></div>
 </main>
-<footer>CodeCoach pilot v0.6.2 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
+<footer>CodeCoach pilot v0.7 · Institute of Public Health, Obafemi Awolowo University, Ile-Ife · Cases are synthetic; no patient data</footer>
 
 <script>
 // ---------- configuration (public key: safe in the app; data protected by database rules) ----------
 const SUPABASE_URL="https://sdqnqbclwoqhouwuzaxv.supabase.co";
 const SUPABASE_KEY="sb_publishable_g0h4KFaS1FivbcTjIOzZfg_6URb05m8";
+if(typeof supabase==="undefined"){document.body.insertAdjacentHTML("afterbegin",'<div style="background:#fbe9e7;color:#b3261e;padding:14px;text-align:center">CodeCoach cannot start without a connection the first time. Connect to the internet and reload.</div>');throw new Error("offline first load");}
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+// ---------- install on phones and weak connections (Task 28) ----------
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}
+const offState=()=>document.getElementById("offBar").classList.toggle("hidden",navigator.onLine);
+window.addEventListener("online",offState);window.addEventListener("offline",offState);offState();
 const $=id=>document.getElementById(id);
 const show=v=>["vLogin","vConsent","vApp","vPw","vTest"].forEach(x=>$(x).classList.toggle("hidden",x!==v));
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
